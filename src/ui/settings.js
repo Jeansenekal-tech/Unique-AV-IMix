@@ -175,7 +175,55 @@ export function openSettings(app, initialTab) {
       h('label', null, 'Allow network (LAN) access'), check(a.lan, (v) => { a.lan = v; apply(); }),
       h('label', null, 'Password'), h('input', { type: 'password', value: a.password, placeholder: 'none', onchange: (e) => { a.password = e.target.value; apply(); } }),
       status, urls,
-      h('div', { class: 'full help' }, 'The API accepts the common switcher function names (Cut, Fade, PreviewInput, OverlayInput1In, SetText, StartRecording …) so control surfaces such as Bitfocus Companion / Stream Deck can drive Unique AV IMix. Enable LAN access to use phones and tablets as remotes — set a password when you do.'));
+      h('div', { class: 'full help' }, 'The API accepts the common switcher function names (Cut, Fade, PreviewInput, OverlayInput1In, SetText, StartRecording …) so control surfaces such as Bitfocus Companion / Stream Deck can drive Unique AV Streaming GuRu. Enable LAN access to use phones and tablets as remotes — set a password when you do.'));
+  };
+
+  const updates = () => {
+    const u = s.updates;
+    const statusEl = h('div', { class: 'full' });
+    const btns = h('div', { class: 'row' });
+    const apply = () => {
+      save();
+      window.imix?.updateConfigure(u);
+    };
+    const draw = (st) => {
+      if (!st) return;
+      const lines = {
+        idle: 'Not checked yet.',
+        checking: 'Checking for updates…',
+        uptodate: `You’re up to date. Latest: ${st.latest || st.current}.`,
+        available: `Version ${st.latest} is available${st.size ? ` (${(st.size / 1048576).toFixed(0)} MB)` : ''}.`,
+        downloading: `Downloading ${st.latest}… ${Math.round((st.progress || 0) * 100)}%`,
+        ready: `Version ${st.latest} is downloaded and ready to install.`,
+        installing: 'Installing…',
+        error: `Problem: ${st.error}`,
+      };
+      statusEl.replaceChildren(h('p', null, h('b', null, `Installed version ${st.current}. `), lines[st.status] || ''),
+        st.notes && ['available', 'ready', 'downloading'].includes(st.status) ? h('div', { class: 'log', style: { height: '110px' } }, st.notes) : '',
+        !st.supported ? h('p', { class: 'help' }, 'Automatic installation works in the installed Mac app (not in development mode).') : '');
+      btns.replaceChildren(
+        h('button', { class: 'btn small', onclick: () => window.imix.updateCheck() }, 'Check now'),
+        st.status === 'available' ? h('button', { class: 'btn small primary', onclick: () => window.imix.updateDownload() }, st.supported ? 'Download update' : 'Open download page') : '',
+        st.status === 'ready' ? h('button', { class: 'btn small primary', onclick: () => app.promptInstallUpdate?.() }, 'Restart & Update') : '');
+    };
+    if (!window.imix?.updateStatus) return h('p', { class: 'help' }, 'Updates are available in the desktop app.');
+    window.imix.updateStatus().then(draw);
+    const off = mixer.on('update', draw);
+    setTimeout(() => {
+      const obs = new MutationObserver(() => {
+        if (!document.body.contains(statusEl)) {
+          off();
+          obs.disconnect();
+        }
+      });
+      obs.observe(document.body, { childList: true, subtree: true });
+    });
+    return h('div', { class: 'form' },
+      statusEl, h('label', null, ''), btns,
+      h('label', null, 'Check automatically'), check(u.auto, (v) => { u.auto = v; apply(); }),
+      h('label', null, 'Download in background'), check(u.autoDownload, (v) => { u.autoDownload = v; apply(); }),
+      h('label', null, 'Update URL'), h('input', { type: 'text', value: u.url, placeholder: 'default (GitHub Releases)', onchange: (e) => { u.url = e.target.value.trim(); apply(); } }),
+      h('div', { class: 'full help' }, 'Updates download quietly and never interrupt a show: the app only restarts when you click “Restart & Update”, or installs when you next quit. The update URL is a folder containing update-mac.json (published by the release workflow).'));
   };
 
   const defs = [
@@ -186,6 +234,7 @@ export function openSettings(app, initialTab) {
     { id: 'replay', label: 'Replay', render: replay },
     { id: 'stingers', label: 'Stingers', render: stingers },
     { id: 'api', label: 'Web & API', render: api },
+    { id: 'updates', label: 'Updates', render: updates },
   ];
   const idx = Math.max(0, defs.findIndex((d) => d.id === initialTab));
   modal({ title: 'Settings', body: tabs(defs, idx), width: 720, buttons: [{ label: 'Done', primary: true }] });

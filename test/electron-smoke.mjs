@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import fs from 'node:fs';
 import net from 'node:net';
+import http from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -29,11 +30,22 @@ const check = (cond, msg) => {
   if (!cond) failures++;
 };
 
+// Local update server announcing a newer version
+const updateServer = http.createServer((req, res) => {
+  if (req.url.startsWith('/updates/update-mac.json')) {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ version: '99.0.0', notes: 'Test release', files: [{ name: 'Unique-AV-Streaming-GuRu-99.0.0-x64.zip', arch: 'x64', size: 10, sha512: 'x' }, { name: 'Unique-AV-Streaming-GuRu-99.0.0-arm64.zip', arch: 'arm64', size: 10, sha512: 'x' }] }));
+  }
+  res.writeHead(404);
+  res.end();
+});
+await new Promise((r) => updateServer.listen(0, '127.0.0.1', r));
+
 const app = await playwright._electron.launch({
   executablePath: require(path.join(root, 'node_modules', 'electron')),
   args: ['--no-sandbox', `--user-data-dir=${userData}`, root],
   cwd: root,
-  env: { ...process.env, IMIX_FAKE_MEDIA: '1' },
+  env: { ...process.env, IMIX_FAKE_MEDIA: '1', UASG_UPDATE_URL: `http://127.0.0.1:${updateServer.address().port}/updates` },
   timeout: 60000,
 });
 const page = await app.firstWindow();
@@ -41,8 +53,15 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 await page.waitForFunction(() => window.imixApp && window.imixApp.ready, null, { timeout: 30000 });
 check(true, 'Electron app boots');
+
 // Keep the software-GPU (CI) load low; real Macs run 1080p60.
 await page.evaluate(() => { imixApp.mixer.settings.thumbFps = 2; imixApp.mixer.setFormat(320, 180, 15); });
+check((await page.title()) === 'Unique AV Streaming GuRu', `window title is the new name (${await page.title()})`);
+const upd = await page.evaluate(() => window.imix.updateCheck());
+check(upd.status === 'available' && upd.latest === '99.0.0', `auto-update finds newer release (${upd.status} ${upd.latest || upd.error || ''})`);
+await page.waitForTimeout(500);
+const pill = await page.evaluate(() => document.getElementById('updatePill').textContent);
+check(/99\.0\.0/.test(pill), `update shown in top bar (“${pill}”)`);
 
 // ---------------------------------------------------------------- HTTP API
 const base = 'http://127.0.0.1:8088';
@@ -165,5 +184,6 @@ check(ff.found, `FFmpeg detected (${ff.path})`);
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);
 await page.screenshot({ path: path.join(out, 'electron.png') });
 await app.close();
+updateServer.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll checks passed');
 process.exit(failures ? 1 : 0);

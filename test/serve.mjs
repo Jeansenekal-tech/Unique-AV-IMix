@@ -26,5 +26,5 @@ export function serve(port = 0, extraRoot) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const s = await serve(Number(process.argv[2]) || 8090);
-  console.log(`Unique AV IMix UI at http://127.0.0.1:${s.address().port}/`);
+  console.log(`Unique AV Streaming GuRu UI at http://127.0.0.1:${s.address().port}/`);
 }

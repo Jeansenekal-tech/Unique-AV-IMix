@@ -1,4 +1,4 @@
-// Unique AV IMix – renderer bootstrap.
+// Unique AV Streaming GuRu – renderer bootstrap.
 import { Mixer } from './engine/mixer.js';
 import { Compositor } from './engine/compositor.js';
 import { Outputs } from './engine/outputs.js';
@@ -37,20 +37,20 @@ function confirmDialog(title, message, okLabel = 'OK') {
 function projectManager() {
   const { mixer } = app;
   let currentPath = null;
-  const filters = [{ name: 'Unique AV IMix Project', extensions: ['imix'] }];
+  const filters = [{ name: 'Unique AV Streaming GuRu Project', extensions: ['guru', 'imix'] }];
 
   async function save(asNew = false) {
     const json = JSON.stringify(mixer.toProject(), null, 2);
     if (imix) {
       let p = currentPath;
-      if (!p || asNew) p = await imix.saveDialog({ title: 'Save Project', defaultPath: `${app.info.documentsDir}/Untitled.imix`, filters });
+      if (!p || asNew) p = await imix.saveDialog({ title: 'Save Project', defaultPath: `${app.info.documentsDir}/Untitled.guru`, filters });
       if (!p) return;
-      if (!/\.imix$/i.test(p)) p += '.imix';
+      if (!/\.(guru|imix)$/i.test(p)) p += '.guru';
       await imix.writeText(p, json);
       currentPath = p;
       toast(`Project saved: ${p}`);
     } else {
-      const a = h('a', { href: URL.createObjectURL(new Blob([json], { type: 'application/json' })), download: 'project.imix' });
+      const a = h('a', { href: URL.createObjectURL(new Blob([json], { type: 'application/json' })), download: 'project.guru' });
       a.click();
     }
   }
@@ -70,7 +70,7 @@ function projectManager() {
       const [p] = await imix.openDialog({ title: 'Open Project', filters, properties: ['openFile'] });
       if (p) await load(await imix.readText(p), p);
     } else {
-      const inp = h('input', { type: 'file', accept: '.imix,application/json' });
+      const inp = h('input', { type: 'file', accept: '.guru,.imix,application/json' });
       inp.onchange = () => openFile(inp.files[0]);
       inp.click();
     }
@@ -248,14 +248,66 @@ function initBridge() {
     if (st.error) toast(`API: ${st.error}`, 'error');
   };
   app.updateApiStatus = updateApi;
+  initUpdates();
   imix.apiConfigure(mixer.settings.api).then(updateApi);
+}
+
+// ------------------------------------------------------------------ updates
+function initUpdates() {
+  const { mixer } = app;
+  const pill = $('#updatePill');
+  let lastStatus = null;
+  const promptInstall = () => {
+    modal({
+      title: `Update to ${app.updateState.latest}`,
+      body: h('div', null,
+        h('p', null, `Unique AV Streaming GuRu ${app.updateState.latest} is ready to install. The app will restart (about 5 seconds).`),
+        app.updateState.notes ? h('div', { class: 'log', style: { height: '140px' } }, app.updateState.notes) : null,
+        h('p', { class: 'help' }, 'Not now? The update is installed automatically the next time you quit.')),
+      width: 520,
+      buttons: [
+        { label: 'Later' },
+        {
+          label: 'Restart & Update',
+          primary: true,
+          onClick: async () => {
+            const r = await imix.updateInstall();
+            if (!r.ok) toast(r.message, 'error', 8000);
+          },
+        },
+      ],
+    });
+  };
+  app.promptInstallUpdate = promptInstall;
+  const render = (st) => {
+    app.updateState = st;
+    mixer.emit('update', st);
+    let text = '';
+    if (st.status === 'available') text = `Update ${st.latest} available`;
+    if (st.status === 'downloading') text = `Downloading update ${Math.round((st.progress || 0) * 100)}%`;
+    if (st.status === 'ready') text = `Restart to update to ${st.latest}`;
+    if (st.status === 'installing') text = 'Installing update…';
+    pill.textContent = text;
+    pill.classList.toggle('hidden', !text);
+    pill.classList.toggle('ready', st.status === 'ready');
+    if (st.status !== lastStatus) {
+      if (st.status === 'ready') toast(`Update ${st.latest} downloaded – click “Restart to update” when you’re off air.`, 'info', 10000);
+      if (st.status === 'available' && !st.supported) toast(`Update ${st.latest} is available.`);
+      if (st.status === 'uptodate' && st.manual) toast(`You’re up to date (version ${st.current}).`);
+      if (st.status === 'error' && st.manual) toast(`Update check failed: ${st.error}`, 'error', 8000);
+    }
+    lastStatus = st.status;
+  };
+  pill.onclick = () => (app.updateState?.status === 'ready' ? promptInstall() : openSettings(app, 'updates'));
+  imix.onUpdateStatus(render);
+  imix.updateConfigure(mixer.settings.updates).then(render);
 }
 
 // ------------------------------------------------------------------- start
 async function main() {
   if (!app.isElectron) document.body.classList.add('web');
   app.info = imix ? await imix.info() : null;
-  if (imix) document.title = 'Unique AV IMix';
+  if (imix) document.title = 'Unique AV Streaming GuRu';
 
   const mixer = new Mixer();
   app.mixer = mixer;
@@ -265,7 +317,7 @@ async function main() {
   try {
     app.compositor = new Compositor(canvas, mixer);
   } catch (e) {
-    document.body.replaceChildren(h('div', { style: { padding: '40px', fontSize: '16px' } }, `Unique AV IMix needs GPU (WebGL) support: ${e.message}`));
+    document.body.replaceChildren(h('div', { style: { padding: '40px', fontSize: '16px' } }, `Unique AV Streaming GuRu needs GPU (WebGL) support: ${e.message}`));
     return;
   }
   mixer.compositor = app.compositor;
@@ -323,7 +375,7 @@ async function main() {
   if (!restored && !localStorage.getItem('imix.welcomed')) {
     localStorage.setItem('imix.welcomed', '1');
     await mixer.addInput({ type: 'colour', color: '#14213d', title: 'Background' });
-    await mixer.addInput({ type: 'title', template: 'Full Screen Slate', fields: { Title: 'Unique AV IMix', Message: 'Add cameras, videos and graphics to get started' } });
+    await mixer.addInput({ type: 'title', template: 'Full Screen Slate', fields: { Title: 'Unique AV Streaming GuRu', Message: 'Add cameras, videos and graphics to get started' } });
     await mixer.addInput({ type: 'title', template: 'Lower Third' }, { select: false });
     await mixer.addInput({ type: 'title', template: 'Clock', fields: { Label: '' } }, { select: false });
     mixer.cut(2);

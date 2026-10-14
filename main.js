@@ -1,4 +1,4 @@
-// Unique AV IMix – Electron main process.
+// Unique AV Streaming GuRu – Electron main process.
 const {
   app, BrowserWindow, ipcMain, dialog, Menu, shell, screen, desktopCapturer,
   session, systemPreferences, nativeImage,
@@ -10,8 +10,10 @@ const { registerSchemePrivileges, handleProtocol, SCHEME } = require('./main/pro
 const ffmpeg = require('./main/ffmpeg');
 const { ApiServer } = require('./main/api-server');
 const { BrowserInputs } = require('./main/browser-input');
+const { Updater } = require('./main/updater');
+const pkg = require('./package.json');
 
-const APP_NAME = 'Unique AV IMix';
+const APP_NAME = 'Unique AV Streaming GuRu';
 app.setName(APP_NAME);
 registerSchemePrivileges();
 
@@ -34,6 +36,12 @@ let quitting = false;
 
 const streamer = new ffmpeg.Streamer((ev) => send('stream-event', ev));
 const browserInputs = new BrowserInputs(() => mainWindow && mainWindow.webContents);
+const updater = new Updater({
+  defaultUrl: process.env.UASG_UPDATE_URL || pkg.updateUrl || '',
+  send: (st) => send('update-status', st),
+  isBusy: () => appStatus.recording || appStatus.streaming,
+  log: (msg) => send('log', msg),
+});
 
 // ---------------------------------------------------------------- API bridge
 const pending = new Map();
@@ -160,6 +168,7 @@ function buildMenu() {
         label: APP_NAME,
         submenu: [
           { role: 'about' },
+          { label: 'Check for Updates…', click: () => { updater.check(true); menuCommand('settings', 'updates')(); } },
           { type: 'separator' },
           { label: 'Settings…', accelerator: 'Cmd+,', click: menuCommand('settings') },
           { type: 'separator' },
@@ -364,6 +373,19 @@ function registerIpc() {
     return out;
   });
 
+  ipcMain.handle('update:configure', (_e, cfg) => updater.configure(cfg));
+  ipcMain.handle('update:status', () => updater.status());
+  ipcMain.handle('update:check', () => updater.check(true));
+  ipcMain.handle('update:download', () => updater.download());
+  ipcMain.handle('update:install', (_e, opts) => {
+    const r = updater.install({ relaunch: true, ...(opts || {}) });
+    if (r.ok) {
+      quitting = true;
+      setTimeout(() => app.quit(), 200);
+    }
+    return r;
+  });
+
   ipcMain.on('app:status', (_e, status) => {
     appStatus = { ...appStatus, ...status };
   });
@@ -418,6 +440,8 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', () => {
   quitting = true;
+  // A downloaded update is installed when the app quits (no relaunch).
+  if (updater.state.status === 'ready' && !updater.installing) updater.install({ relaunch: false, force: true });
   streamer.stop();
   browserInputs.closeAll();
   apiServer.stop();

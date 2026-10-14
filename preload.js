@@ -59,6 +59,13 @@ contextBridge.exposeInMainWorld('imix', {
   openPath: (p) => ipcRenderer.invoke('shell:openPath', p),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
 
+  updateConfigure: (cfg) => ipcRenderer.invoke('update:configure', cfg),
+  updateStatus: () => ipcRenderer.invoke('update:status'),
+  updateCheck: () => ipcRenderer.invoke('update:check'),
+  updateDownload: () => ipcRenderer.invoke('update:download'),
+  updateInstall: (opts) => ipcRenderer.invoke('update:install', opts),
+  onUpdateStatus: on('update-status'),
+
   onMenu: on('menu'),
   onLog: on('log'),
 });

@@ -23,7 +23,7 @@ export function classify(file) {
 export async function addFiles(app, files) {
   let added = 0;
   for (const file of files) {
-    if (/\.imix$/i.test(file.name)) {
+    if (/\.(guru|imix)$/i.test(file.name)) {
       app.project.openFile(file);
       return;
     }
@@ -180,7 +180,7 @@ async function screenDialog(app) {
     toast(`Screen capture unavailable: ${e.message}`, 'error');
   }
   if (!sources.length) {
-    return toast(status === 'denied' ? 'Allow Screen Recording for Unique AV IMix in System Settings → Privacy & Security.' : 'No screens found', 'error');
+    return toast(status === 'denied' ? 'Allow Screen Recording for Unique AV Streaming GuRu in System Settings → Privacy & Security.' : 'No screens found', 'error');
   }
   let selected = sources[0];
   const cards = sources.map((s) => h('div', {

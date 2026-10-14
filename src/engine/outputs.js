@@ -7,7 +7,7 @@ function pad(n) {
 
 export function expandPattern(pattern) {
   const d = new Date();
-  return (pattern || 'Unique AV IMix {date} {time}')
+  return (pattern || 'Unique AV Streaming GuRu {date} {time}')
     .replace('{date}', `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`)
     .replace('{time}', `${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`)
     .replace(/[\\/:*?"<>|]/g, '-');

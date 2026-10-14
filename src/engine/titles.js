@@ -122,7 +122,7 @@ export const TITLE_TEMPLATES = {
     },
   },
   Ticker: {
-    fields: [['Label', 'LATEST'], ['Text', 'Welcome to Unique AV IMix  •  Add your headlines here  •  Scrolling ticker template']],
+    fields: [['Label', 'LATEST'], ['Text', 'Welcome to Unique AV Streaming GuRu  •  Add your headlines here  •  Scrolling ticker template']],
     animated: false,
     continuous: true,
     draw(ctx, f, st, { now, state }) {

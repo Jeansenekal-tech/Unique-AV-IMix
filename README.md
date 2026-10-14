@@ -1,6 +1,6 @@
-# Unique AV IMix
+# Unique AV Streaming GuRu
 
-**Unique AV IMix** is a live video production switcher for macOS: mix cameras, video files, graphics and audio with transitions, overlays and titles, and record and live-stream the result. It is modelled on the workflow of Windows production switchers such as vMix, so operators who know that workflow will feel at home.
+**Unique AV Streaming GuRu** is a live video production switcher for macOS: mix cameras, video files, graphics and audio with transitions, overlays and titles, and record and live-stream the result. It is modelled on the workflow of Windows production switchers such as vMix, so operators who know that workflow will feel at home.
 
 It is an Electron app. Compositing runs on the GPU (WebGL/Metal), audio mixing uses Web Audio, and FFmpeg handles streaming with Apple VideoToolbox hardware encoding.
 
@@ -62,18 +62,23 @@ Add inputs from the **＋ Add Input** button or the **Input** menu, or drop file
 * The API uses the function names and XML layout that common switcher control surfaces expect, so tools such as Bitfocus Companion and Stream Deck can drive it.
 * **Web controller:** open `http://<mac-ip>:8088/` on a phone or tablet. You can switch inputs, run overlays, edit titles, mix audio and start or stop the recording and stream. LAN access and a password are configured in *Settings → Web & API*.
 
+### Automatic updates
+* The app checks for new versions in the background every 4 hours and downloads them quietly. It **never restarts during a show**: a green *Restart to update* pill appears in the top bar, and if you ignore it the update installs the next time you quit.
+* Each download is verified against its SHA-512 checksum before it is installed. Installation swaps the app bundle in place, so it works for signed and unsigned builds alike.
+* *Settings → Updates* has *Check now*, toggles for automatic checking and background download, and a custom update URL. The app menu also has **Check for Updates…**.
+
 ### Projects
-* Save and open a whole production as an `.imix` file: inputs, settings, transitions, overlays, stingers, stream destinations, shortcuts and scripts.
+* Save and open a whole production as a `.guru` file: inputs, settings, transitions, overlays, stingers, stream destinations, shortcuts and scripts.
 * The last session is restored automatically on launch.
 * Output formats: 720p, 1080p, 1440p, 4K, vertical 1080×1920, square and PAL SD, at 24, 25, 30, 50 or 60 fps.
 
 ## Installing on a Mac
 
-1. Download the `.dmg` for your Mac from the GitHub Actions build artifacts or a release. Use **arm64** for Apple Silicon (M1–M4) and **x64** for Intel.
-2. Drag **Unique AV IMix** to Applications.
+1. Download the `.dmg` for your Mac. Use **arm64** for Apple Silicon (M1–M4) and **x64** for Intel. Releases are on the GitHub *Releases* page. Every push also builds DMGs, which you'll find under *Actions → Build macOS app → (run) → Artifacts*.
+2. Drag **Unique AV Streaming GuRu** to Applications.
 3. Builds are unsigned unless you add signing certificates, so the first time you open the app, right-click it and choose **Open**. You can also run:
    ```sh
-   xattr -dr com.apple.quarantine "/Applications/Unique AV IMix.app"
+   xattr -dr com.apple.quarantine "/Applications/Unique AV Streaming GuRu.app"
    ```
 4. Allow **Camera**, **Microphone** and **Screen Recording** when macOS asks. You can change these later in *System Settings → Privacy & Security*.
 
@@ -89,8 +94,24 @@ npm run dist:mac     # build .dmg + .zip into dist/ (run on a Mac)
 
 Every push runs `.github/workflows/build-mac.yml`. It runs the tests and then builds Apple Silicon and Intel `.dmg` files. To sign and notarise the builds, add the `MAC_CERT_P12_BASE64`, `MAC_CERT_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` repository secrets.
 
+### Publishing a release (and auto-updates)
+
+```sh
+git tag v1.0.1 && git push origin v1.0.1
+```
+
+Pushing a `v*` tag makes the workflow build both DMGs, set the app version from the tag, and publish a GitHub Release. The release includes the `.dmg` and `.zip` files and an `update-mac.json` manifest. Installed copies find the release through `updateUrl` in `package.json`, which by default points to this repository's latest release.
+
+> **The repository is private.** An installed app can't download from a private repository's releases. Choose one of these so auto-update can reach users:
+> * make this repository public, or
+> * publish releases to a separate **public** repository and point `updateUrl` in `package.json` to `https://github.com/<owner>/<public-repo>/releases/latest/download`, or
+> * upload the release files (`update-mac.json`, `.zip`, `.dmg`) to any web server or S3 bucket and set `updateUrl` to that folder.
+>
+> You can also change the URL per machine in *Settings → Updates*.
+
 ### Tests
 ```sh
+node test/unit-updater.mjs                  # updater version logic + release manifest
 node test/browser-smoke.mjs                 # UI + engine in headless Chromium (needs playwright + ffmpeg)
 xvfb-run -a node test/electron-smoke.mjs    # full app: HTTP/TCP API, recording, FFmpeg streaming, browser input
 ```
@@ -133,6 +154,8 @@ main/protocol.js        imix:// scheme – serves the UI and local media (with R
 main/ffmpeg.js          FFmpeg discovery, live streaming (tee muxer → RTMP/SRT), remux
 main/api-server.js      HTTP + TCP control API and web controller
 main/browser-input.js   Offscreen Chromium pages for web browser inputs
+main/updater.js         Auto-update (manifest check, verified download, bundle swap)
+scripts/                Release manifest generator, ad-hoc signing hook
 preload.js              window.imix bridge
 src/engine/mixer.js     Production state machine + render loop (worker-timed)
 src/engine/compositor.js  WebGL compositor: inputs → layers → preview/program, transitions, overlays

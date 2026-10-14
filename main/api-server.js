@@ -1,6 +1,6 @@
 // Remote control APIs, modelled on the conventions popular switchers use so
 // existing control surfaces (e.g. Bitfocus Companion, Stream Deck plugins)
-// can be pointed at Unique AV IMix:
+// can be pointed at Unique AV Streaming GuRu:
 //   HTTP  :8088  GET /api?Function=Cut&Input=2   GET /api (XML state)
 //   TCP   :8099  FUNCTION Cut Input=2 | XML | TALLY | SUBSCRIBE TALLY
 // plus a touch-friendly web controller at http://<host>:8088/
@@ -81,7 +81,7 @@ class ApiServer {
   async handleHttp(req, res) {
     try {
       if (!this.authorized(req)) {
-        res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Unique AV IMix"' });
+        res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Unique AV Streaming GuRu"' });
         return res.end('Authentication required');
       }
       const url = new URL(req.url, 'http://localhost');

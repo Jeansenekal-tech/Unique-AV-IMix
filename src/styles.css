@@ -43,6 +43,8 @@ body.web #topbar { padding-left: 14px; }
 .pill.rec { background: var(--program); color: #fff; animation: pulse 1.6s infinite; }
 .pill.stream { background: #c2185b; color: #fff; }
 .pill.ext { background: var(--accent); color: #fff; }
+.pill.update { background: var(--bg4); color: var(--text); cursor: pointer; }
+.pill.update.ready { background: var(--preview); color: #fff; animation: pulse 2s infinite; }
 .pill.ftb { background: #000; color: #fff; border: 1px solid #fff; animation: pulse 1s infinite; }
 @keyframes pulse { 50% { opacity: .65; } }
 

@@ -365,7 +365,7 @@ export class Api {
     const o = this.app.outputs;
     const now = performance.now();
     return {
-      app: 'Unique AV IMix',
+      app: 'Unique AV Streaming GuRu',
       version: '1.0.0',
       format: { width: m.settings.width, height: m.settings.height, fps: m.settings.fps },
       program: m.inputNumber(m.getInput(m.programId)) || 0,
@@ -414,7 +414,7 @@ export class Api {
     }).join('');
     const overlays = s.overlays.map((o) => `<overlay number="${o.number}">${o.active && o.input ? o.input : ''}</overlay>`).join('');
     const transitions = s.transitions.map((t) => `<transition number="${t.number}" effect="${esc(t.effect.replace(/\s+/g, ''))}" duration="${t.duration}"/>`).join('');
-    return `<vmix><version>1.0.0</version><edition>Unique AV IMix</edition><inputs>${inputs}</inputs><overlays>${overlays}</overlays>`
+    return `<vmix><version>1.0.0</version><edition>Unique AV Streaming GuRu</edition><inputs>${inputs}</inputs><overlays>${overlays}</overlays>`
       + `<preview>${s.preview}</preview><active>${s.program}</active><fadeToBlack>${tf(s.fadeToBlack)}</fadeToBlack>`
       + `<transitions>${transitions}</transitions><recording>${tf(s.recording)}</recording><external>${tf(s.external)}</external>`
       + `<streaming>${tf(s.streaming)}</streaming><playList>False</playList><multiCorder>False</multiCorder><fullscreen>False</fullscreen>`

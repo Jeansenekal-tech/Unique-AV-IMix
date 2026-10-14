@@ -15,7 +15,7 @@ export const DEFAULT_SETTINGS = {
   recordFormat: 'mp4',
   recordBitrate: 16000,
   remux: true,
-  filenamePattern: 'Unique AV IMix {date} {time}',
+  filenamePattern: 'Unique AV Streaming GuRu {date} {time}',
   recordBus: 'M',
   streamBus: 'M',
   streamBitrate: 6000,
@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS = {
   replaySeconds: 20,
   replayQuality: '960x540',
   autoRestoreSession: true,
+  updates: { auto: true, autoDownload: true, url: '' },
 };
 
 const SETTINGS_KEY = 'imix.settings';
@@ -35,7 +36,7 @@ const SETTINGS_KEY = 'imix.settings';
 function loadSettings() {
   try {
     const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
-    return { ...structuredClone(DEFAULT_SETTINGS), ...raw, api: { ...DEFAULT_SETTINGS.api, ...(raw.api || {}) } };
+    return { ...structuredClone(DEFAULT_SETTINGS), ...raw, api: { ...DEFAULT_SETTINGS.api, ...(raw.api || {}) }, updates: { ...DEFAULT_SETTINGS.updates, ...(raw.updates || {}) } };
   } catch {
     return structuredClone(DEFAULT_SETTINGS);
   }
@@ -574,7 +575,7 @@ export class Mixer {
   toProject() {
     const keep = (i) => !(i.url && i.url.startsWith('blob:') && !i.path);
     return {
-      app: 'Unique AV IMix',
+      app: 'Unique AV Streaming GuRu',
       version: 1,
       format: { width: this.settings.width, height: this.settings.height, fps: this.settings.fps },
       inputs: this.inputs.filter(keep).map((i) => i.serialize()),
@@ -603,7 +604,7 @@ export class Mixer {
   }
 
   async loadProject(p) {
-    if (!p || !Array.isArray(p.inputs)) throw new Error('Not a Unique AV IMix project');
+    if (!p || !Array.isArray(p.inputs)) throw new Error('Not a Unique AV Streaming GuRu project');
     await this.clearProject();
     if (p.format) this.setFormat(p.format.width, p.format.height, p.format.fps);
     for (const data of p.inputs) {
