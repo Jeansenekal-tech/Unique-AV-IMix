@@ -466,7 +466,9 @@ app.whenReady().then(async () => {
   buildMenu();
   createMainWindow();
   sysmon.start();
-  countdown.createOperator(); // hidden; keeps presenter/MIDI/sounds alive
+  // Countdown operator: hidden, created once the mixer has loaded; it keeps
+  // the presenter screen, warning sounds and MIDI alive.
+  mainWindow.webContents.once('did-finish-load', () => setTimeout(() => countdown.createOperator(), 500));
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();

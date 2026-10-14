@@ -49,7 +49,16 @@ const app = await playwright._electron.launch({
   env: { ...process.env, IMIX_FAKE_MEDIA: '1', UASG_UPDATE_URL: `http://127.0.0.1:${updateServer.address().port}/updates` },
   timeout: 60000,
 });
-const page = await app.firstWindow();
+// The hidden Countdown operator is a second window – pick the mixer by URL.
+async function mixerWindow() {
+  for (let i = 0; i < 120; i++) {
+    const w = app.windows().find((x) => x.url().startsWith('imix://app/index'));
+    if (w) return w;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  throw new Error('mixer window did not open');
+}
+const page = await mixerWindow();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 await page.waitForFunction(() => window.imixApp && window.imixApp.ready, null, { timeout: 30000 });
