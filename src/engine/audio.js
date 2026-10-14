@@ -1,11 +1,14 @@
 // Audio mixer built on Web Audio.
 //
-//  source → delay → trim → gate → EQ(low/mid/high) → compressor → pan → fader → onAir(AFV/mute)
+//  source → delay → trim → gate → EQ (6-band) → compressor → pan → fader → onAir(AFV/mute)
 //         → meter
-//         → sends → Master / Bus A / Bus B
-//  Master → master fader → meter → [record/stream destination] + monitor (speakers)
+//         → sends → Master / Bus A–F
+//  Bus    → EQ → fader → mute → meter → [record/stream destination] (+ monitor)
+import { Equalizer, normalizeEq } from './eq.js';
 
-export const BUSES = ['M', 'A', 'B'];
+export const AUX_BUSES = ['A', 'B', 'C', 'D', 'E', 'F'];
+export const BUSES = ['M', ...AUX_BUSES];
+export const busLabel = (b) => (b === 'M' ? 'Master' : `Bus ${b}`);
 
 export function faderToGain(v) {
   // 0..100 fader, cubic taper: 100 = unity (0 dB), 70 ≈ -9 dB, 50 ≈ -18 dB
@@ -50,9 +53,12 @@ class Bus {
     const { ctx } = engine;
     this.name = name;
     this.input = ctx.createGain();
+    this.eqNode = new Equalizer(ctx);
+    this.eq = normalizeEq(null);
     this.fader = ctx.createGain();
     this.mute = ctx.createGain();
-    this.input.connect(this.fader).connect(this.mute);
+    this.input.connect(this.eqNode.input);
+    this.eqNode.output.connect(this.fader).connect(this.mute);
     this.meter = new Meter(ctx, this.mute);
     this.dest = ctx.createMediaStreamDestination();
     this.mute.connect(this.dest);
@@ -67,6 +73,21 @@ class Bus {
     this.fader.gain.setTargetAtTime(faderToGain(this.volume), t, 0.02);
     this.mute.gain.setTargetAtTime(this.muted ? 0 : 1, t, 0.01);
   }
+
+  applyEq() {
+    this.eqNode.apply(this.eq);
+  }
+
+  serialize() {
+    return { volume: this.volume, muted: this.muted, eq: this.eq };
+  }
+
+  restore(data) {
+    if (!data) return;
+    this.eq = normalizeEq(data.eq);
+    this.applyEq();
+    this.set(data.volume ?? 100, !!data.muted);
+  }
 }
 
 class Channel {
@@ -80,16 +101,7 @@ class Channel {
     this.gateAnalyser = ctx.createAnalyser();
     this.gateAnalyser.fftSize = 256;
     this.gateBuf = new Float32Array(256);
-    this.low = ctx.createBiquadFilter();
-    this.low.type = 'lowshelf';
-    this.low.frequency.value = 200;
-    this.mid = ctx.createBiquadFilter();
-    this.mid.type = 'peaking';
-    this.mid.frequency.value = 1200;
-    this.mid.Q.value = 0.9;
-    this.high = ctx.createBiquadFilter();
-    this.high.type = 'highshelf';
-    this.high.frequency.value = 5000;
+    this.eqNode = new Equalizer(ctx);
     this.comp = ctx.createDynamicsCompressor();
     this.compBypass = ctx.createGain();
     this.compIn = ctx.createGain();
@@ -101,7 +113,8 @@ class Channel {
 
     this.delay.connect(this.trim).connect(this.gate);
     this.trim.connect(this.gateAnalyser);
-    this.gate.connect(this.low).connect(this.mid).connect(this.high).connect(this.compIn);
+    this.gate.connect(this.eqNode.input);
+    this.eqNode.output.connect(this.compIn);
     this.compIn.connect(this.comp).connect(this.compOut);
     this.compIn.connect(this.compBypass).connect(this.compOut);
     this.compOut.connect(this.pan).connect(this.fader).connect(this.onAir);
@@ -164,9 +177,8 @@ class Channel {
     const t = this.engine.ctx.currentTime;
     this.delay.delayTime.setTargetAtTime(Math.min(2, Math.max(0, a.delay / 1000)), t, 0.01);
     this.trim.gain.setTargetAtTime(Math.pow(10, (a.gain || 0) / 20), t, 0.01);
-    this.low.gain.value = a.eq.on ? a.eq.low : 0;
-    this.mid.gain.value = a.eq.on ? a.eq.mid : 0;
-    this.high.gain.value = a.eq.on ? a.eq.high : 0;
+    if (!Array.isArray(a.eq?.bands)) a.eq = normalizeEq(a.eq);
+    this.eqNode.apply(a.eq);
     this.comp.threshold.value = a.comp.threshold;
     this.comp.ratio.value = a.comp.ratio;
     this.comp.attack.value = 0.005;
@@ -182,7 +194,7 @@ class Channel {
     }
     this.pan.pan.setTargetAtTime(Math.max(-1, Math.min(1, a.balance)), t, 0.01);
     this.fader.gain.setTargetAtTime(faderToGain(a.volume), t, 0.02);
-    for (const b of BUSES) this.sends[b].gain.setTargetAtTime(a.buses[b] ? 1 : 0, t, 0.01);
+    for (const b of BUSES) this.sends[b].gain.setTargetAtTime(a.buses?.[b] ? 1 : 0, t, 0.01);
   }
 
   setAudible(on) {
@@ -242,6 +254,7 @@ export class AudioEngine {
 
   setMonitor(on, bus = this.monitorBus) {
     this.monitorOn = on;
+    if (!this.buses[bus]) bus = 'M';
     if (bus !== this.monitorBus) {
       try {
         this.buses[this.monitorBus].mute.disconnect(this.monitor);
@@ -293,7 +306,15 @@ export class AudioEngine {
   }
 
   stream(bus = 'M') {
-    return this.buses[bus].dest.stream;
+    return (this.buses[bus] || this.buses.M).dest.stream;
+  }
+
+  serializeBuses() {
+    return Object.fromEntries(BUSES.map((b) => [b, this.buses[b].serialize()]));
+  }
+
+  restoreBuses(data) {
+    for (const b of BUSES) this.buses[b].restore(data?.[b]);
   }
 
   meters() {

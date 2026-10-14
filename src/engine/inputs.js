@@ -3,6 +3,7 @@
 //   audioElement / audioStream -> what the audio engine should mix
 //   serialize() / static restore
 import { TITLE_TEMPLATES, DEFAULT_TITLE_STYLE, renderTitle, parseDuration } from './titles.js';
+import { defaultEq, normalizeEq } from './eq.js';
 
 let idSeq = 0;
 export const newId = () => `${Date.now().toString(36)}${(idSeq++).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -46,10 +47,10 @@ export function defaultSettings() {
       muted: false,
       afv: false,
       delay: 0,
-      eq: { on: false, low: 0, mid: 0, high: 0 },
+      eq: defaultEq(),
       comp: { on: false, threshold: -18, ratio: 4 },
       gate: { on: false, threshold: -50 },
-      buses: { M: true, A: false, B: false },
+      buses: { M: true, A: false, B: false, C: false, D: false, E: false, F: false },
     },
   };
 }
@@ -84,6 +85,7 @@ export class Input {
     this.type = type;
     this.title = opts.title || INPUT_TYPES[type]?.label || type;
     this.settings = merge(defaultSettings(), opts.settings);
+    this.settings.audio.eq = normalizeEq(opts.settings?.audio?.eq);
     this.hasVideo = true;
     this.hasAudio = false;
     this.version = 0;

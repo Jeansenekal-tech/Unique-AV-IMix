@@ -3,6 +3,8 @@
 import { h, modal, tabs, slider, hexToRgb01, rgb01ToHex, toast } from './dom.js';
 import { TITLE_TEMPLATES } from '../engine/titles.js';
 import { fileSource } from './add-input.js';
+import { BUSES, busLabel } from '../engine/audio.js';
+import { openInputEq } from './eq-panel.js';
 
 export function openInputSettings(app, input) {
   const { mixer } = app;
@@ -179,12 +181,10 @@ export function openInputSettings(app, input) {
       ...slider('Delay (sync)', a.delay, { min: 0, max: 1000, step: 1, fmt: (v) => `${v} ms`, onInput: (v) => { a.delay = v; changed(); } }),
       h('label', null, 'Muted'), check(a.muted, (v) => { a.muted = v; changed(); }),
       h('label', null, 'Audio follows video'), check(a.afv, (v) => { a.afv = v; changed(); }),
-      h('label', null, 'Output buses'), h('div', { class: 'row' }, ['M', 'A', 'B'].map((b) => h('label', null, check(a.buses[b], (v) => { a.buses[b] = v; changed(); }), ` ${b === 'M' ? 'Master' : `Bus ${b}`}`))),
+      h('label', null, 'Output buses'), h('div', { class: 'row', style: { flexWrap: 'wrap' } }, BUSES.map((b) => h('label', null, check(a.buses[b], (v) => { a.buses[b] = v; changed(); }), ` ${busLabel(b)}`))),
       h('h4', null, 'Equaliser'),
-      h('label', null, 'EQ on'), check(a.eq.on, (v) => { a.eq.on = v; changed(); }),
-      ...slider('Low (200 Hz)', a.eq.low, { min: -15, max: 15, step: 0.5, fmt: (v) => `${v} dB`, onInput: (v) => { a.eq.low = v; changed(); } }),
-      ...slider('Mid (1.2 kHz)', a.eq.mid, { min: -15, max: 15, step: 0.5, fmt: (v) => `${v} dB`, onInput: (v) => { a.eq.mid = v; changed(); } }),
-      ...slider('High (5 kHz)', a.eq.high, { min: -15, max: 15, step: 0.5, fmt: (v) => `${v} dB`, onInput: (v) => { a.eq.high = v; changed(); } }),
+      h('label', null, '6-band EQ'), h('div', { class: 'row' }, check(a.eq.on, (v) => { a.eq.on = v; changed(); }),
+        h('button', { class: 'btn small', onclick: () => openInputEq(app, input) }, 'Open EQ…')),
       h('h4', null, 'Dynamics'),
       h('label', null, 'Compressor'), check(a.comp.on, (v) => { a.comp.on = v; changed(); }),
       ...slider('Threshold', a.comp.threshold, { min: -60, max: 0, step: 1, fmt: (v) => `${v} dB`, onInput: (v) => { a.comp.threshold = v; changed(); } }),

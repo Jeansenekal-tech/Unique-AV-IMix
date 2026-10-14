@@ -31,7 +31,7 @@ Add inputs from the **＋ Add Input** button or the **Input** menu, or drop file
 * **Colour correction:** brightness, contrast, saturation, hue and gamma.
 * **Keying:** chroma key (green or blue screen, with an eyedropper, similarity, smoothness and spill reduction) and luma key.
 * **Layers:** up to 4 other inputs composited on top. Use them for PiP, side-by-side, quad split or virtual sets, with optional borders.
-* **Audio:** volume, trim gain, balance, sync delay, 3-band EQ, compressor and noise gate. Routes to Master, Bus A and Bus B, with mute, solo and audio-follows-video.
+* **Audio:** volume, trim gain, balance, sync delay, 6-band parametric EQ, compressor and noise gate. Routes to Master and Buses A–F, with mute, solo and audio-follows-video.
 
 ### Switching
 * **Preview / Output** monitors with transport controls (play/pause, seek, next item).
@@ -42,8 +42,9 @@ Add inputs from the **＋ Add Input** button or the **Input** menu, or drop file
 * Tally on every tile: red when on air, green when in preview.
 
 ### Audio mixer
-* A channel strip per audio input with peak meters and peak hold, fader, mute, solo, Auto (audio follows video) and M/A/B bus routing.
-* Master, Bus A and Bus B strips. Each output (recording, stream, speaker monitor) can take its audio from any bus.
+* A channel strip per audio input with peak meters and peak hold, fader, mute, solo, Auto (audio follows video), EQ and routing buttons for **Master and Buses A–F**.
+* **7 mix buses:** Master plus six aux buses, A–F. Each has its own fader, mute, meter and EQ. Recording, streaming and the speaker monitor can each take any bus, so you can run a clean record mix, a mix-minus for remote guests and a separate stream mix at the same time.
+* **6-band parametric EQ** on every input and every bus. The bands are low cut, low shelf, three bells and high shelf, and each band's type can be changed, including to high cut or notch. Click **EQ** on any strip to open the EQ window. Drag points on the frequency-response curve to set frequency and gain, scroll to change the width (Q), or type exact values. Presets: Voice / Presenter, Podcast / Broadcast, Music Bed, Low Cut, Bass Boost and Telephone. The EQ button lights up when the EQ is on. Settings are saved with the project, and older projects' 3-band EQ settings carry over.
 
 ### Outputs
 * **Record** to MP4 (H.264/AAC) or WebM. Files are finalised with FFmpeg so they seek correctly.
@@ -204,7 +205,8 @@ src/web/index.html      Remote web controller
 
 vMix has had more than 15 years of development, and some of its features depend on proprietary SDKs or Windows-only drivers. These are **not** in this version:
 
-* **NDI** inputs and outputs (needs the NDI SDK).
+* **Native NDI** inputs and outputs (needs the NDI SDK and a native module).
+  *Workaround today:* install the free **NDI Tools for Mac** and use **NDI Virtual Input**. It turns any NDI source on your network into a camera, which you add here with *Add Input → Camera*. For NDI output, a screen-capture NDI sender can capture the External Output window (check which senders your NDI Tools version includes).
 * **SRT / RTMP inputs** (receiving streams). SRT and RTMP *outputs* are supported.
 * **Virtual camera output** into Zoom or Teams (needs a signed macOS camera extension).
 * **Video calls** (vMix Call), **PTZ camera control**, **3D virtual sets**, **multi-camera ISO recording** (MultiCorder), a visual **title designer** (GT Designer), **VST audio plugins** and **data sources** for titles.

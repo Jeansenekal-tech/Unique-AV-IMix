@@ -147,10 +147,61 @@ r = await page.evaluate(async () => {
   return Math.max(...lv['bus:M']);
 });
 check(r > 0.01, `master meter shows audio (${r.toFixed(3)})`);
+// Six aux buses + parametric EQ
 r = await page.evaluate(async () => {
+  const m = imixApp.mixer;
+  const busStrips = document.querySelectorAll('.strip.master').length;
+  await imixApp.api.call('AudioBus', { Input: 5, Value: 'F' });
+  await new Promise((res) => setTimeout(res, 400));
+  const lv = m.audio.meters();
+  return { buses: Object.keys(m.audio.buses).join(''), busStrips, busF: Math.max(...lv['bus:F']), routed: m.getInput(5).settings.audio.buses.F };
+});
+check(r.buses === 'MABCDEF' && r.busStrips === 7, `Master + buses A–F (${r.buses}, ${r.busStrips} bus strips)`);
+check(r.routed && r.busF > 0.01, `input routed to Bus F carries audio (${r.busF.toFixed(3)})`);
+r = await page.evaluate(async () => {
+  const { EQ_PRESETS } = await import('./engine/eq.js');
+  const m = imixApp.mixer;
+  const inp = m.getInput(5);
+  const eq = inp.settings.audio.eq;
+  eq.bands = EQ_PRESETS.Telephone();
+  eq.on = true;
+  m.inputChanged(inp);
+  await new Promise((res) => setTimeout(res, 300));
+  const node = m.audio.channels.get(inp.id).eqNode;
+  const [lo, mid, hi] = node.response([100, 1000, 10000]);
+  eq.on = false;
+  m.inputChanged(inp);
+  await new Promise((res) => setTimeout(res, 300));
+  const [flat] = node.response([100]);
+  return { lo, mid, hi, flat };
+});
+check(r.lo < -15 && r.hi < -15 && r.mid > 2, `EQ shapes the signal (100 Hz ${r.lo.toFixed(1)} dB, 1 kHz ${r.mid.toFixed(1)} dB, 10 kHz ${r.hi.toFixed(1)} dB)`);
+check(Math.abs(r.flat) < 0.1, `EQ bypass is flat (${r.flat.toFixed(2)} dB)`);
+await page.evaluate(() => [...document.querySelectorAll('.strip .btn.eq')].pop().click());
+r = await page.evaluate(() => ({ panel: !!document.querySelector('.panel .eq-panel canvas'), rows: document.querySelectorAll('.panel .eq-row').length, title: document.querySelector('.panel .modal-head span')?.textContent }));
+check(r.panel && r.rows === 6, `EQ window opens with 6 bands (${r.title})`);
+await page.evaluate(() => document.querySelector('.panel .x-btn').click());
+r = await page.evaluate(async () => {
+  const { normalizeEq } = await import('./engine/eq.js');
+  const old = normalizeEq({ on: true, low: 4, mid: -2, high: 3 });
+  const m = imixApp.mixer;
+  m.audio.buses.C.eq.on = true;
+  m.audio.buses.C.eq.bands[2].gain = 5;
+  const proj = JSON.parse(JSON.stringify(m.toProject()));
+  return { old: [old.on, old.bands[1].gain, old.bands[3].gain, old.bands[5].gain], saved: proj.audioBuses.C.eq.bands[2].gain };
+});
+check(r.old.join() === 'true,4,-2,3', `old 3-band EQ settings migrate (${r.old})`);
+check(r.saved === 5, 'bus EQ saved in the project');
+
+r = await page.evaluate(async () => {
+  // the 4 s clip may have finished during the audio checks – restart it first
+  const v = imixApp.mixer.getInput(5);
+  v.restart();
+  v.play();
+  await new Promise((res) => setTimeout(res, 300));
   await imixApp.api.call('Cut', { Input: 1 });
   await new Promise((res) => setTimeout(res, 300));
-  return imixApp.mixer.getInput(5).state;
+  return v.state;
 });
 check(r === 'Paused', `auto-pause off air (${r})`);
 

@@ -1,7 +1,8 @@
 // Transition panel, T-bar, monitor transports, audio mixer and overlay status.
 import { h, $, fmtShort } from './dom.js';
 import { TRANSITIONS, OVERLAY_EFFECTS } from '../engine/transitions.js';
-import { gainToDb, faderToGain } from '../engine/audio.js';
+import { gainToDb, faderToGain, BUSES, AUX_BUSES, busLabel } from '../engine/audio.js';
+import { openInputEq, openBusEq } from './eq-panel.js';
 
 export function initTransitions(app) {
   const { mixer } = app;
@@ -177,18 +178,20 @@ export function initAudioMixer(app) {
     return h('canvas', { width: 14, height: 160 });
   }
 
-  function makeStrip({ id, name, master, getVol, setVol, getMute, toggleMute, extra }) {
+  function makeStrip({ id, name, master, getVol, setVol, getMute, toggleMute, getEq, openEqWin, extra, buses }) {
     const meter = meterCanvas();
-    const fader = h('input', { type: 'range', min: 0, max: 100, step: 0.5, value: getVol(), oninput: (e) => setVol(Number(e.target.value)) });
+    const fader = h('input', { type: 'range', min: 0, max: 100, step: 0.5, value: getVol(), title: 'Double-click for 0 dB', oninput: (e) => setVol(Number(e.target.value)) });
     fader.addEventListener('dblclick', () => setVol(100));
     const db = h('div', { class: 'strip-db' });
-    const mute = h('button', { class: 'btn mute', onclick: toggleMute }, 'M');
+    const mute = h('button', { class: 'btn mute', title: 'Mute', onclick: toggleMute }, 'MUTE');
+    const eq = h('button', { class: 'btn eq', title: 'Equaliser', onclick: openEqWin }, 'EQ');
     const el = h('div', { class: `strip ${master ? 'master' : ''}` },
       h('div', { class: 'strip-name', title: name }, name),
       h('div', { class: 'strip-mid' }, meter, fader),
       db,
-      h('div', { class: 'strip-btns' }, mute, ...(extra || [])));
-    const s = { el, meter, fader, db, mute, getVol, getMute, peak: [0, 0], hold: [0, 0] };
+      h('div', { class: 'strip-btns' }, mute, eq, ...(extra || [])),
+      buses ? h('div', { class: 'strip-buses' }, buses) : null);
+    const s = { el, meter, fader, db, mute, eq, getVol, getMute, getEq, peak: [-90, -90], hold: [-90, -90] };
     strips.set(id, s);
     return s;
   }
@@ -199,9 +202,9 @@ export function initAudioMixer(app) {
     for (const input of mixer.inputs) {
       if (!input.hasAudio) continue;
       const a = input.settings.audio;
-      const bus = (b) => h('button', { class: 'btn bus', title: `Route to ${b === 'M' ? 'Master' : `Bus ${b}`}`, 'data-bus': b, onclick: () => app.api.call('AudioBus', { Input: input.id, Value: b }) }, b);
+      const bus = (b) => h('button', { class: 'btn bus', title: `Send to ${busLabel(b)}`, 'data-bus': b, onclick: () => app.api.call('AudioBus', { Input: input.id, Value: b }) }, b);
       const afv = h('button', { class: 'btn afv', title: 'Audio follows video (on only when on air)', onclick: () => app.api.call('AudioAuto', { Input: input.id }) }, 'Auto');
-      const solo = h('button', { class: 'btn solo', title: 'Solo (monitor only this input)', onclick: () => { mixer.audio.setSolo(input.id); refresh(); } }, 'S');
+      const solo = h('button', { class: 'btn solo', title: 'Solo (monitor only this input)', onclick: () => { mixer.audio.setSolo(input.id); refresh(); } }, 'SOLO');
       const s = makeStrip({
         id: input.id,
         name: `${mixer.inputNumber(input)}. ${input.title}`,
@@ -209,7 +212,10 @@ export function initAudioMixer(app) {
         setVol: (v) => app.api.call('SetVolume', { Input: input.id, Value: v }),
         getMute: () => a.muted,
         toggleMute: () => app.api.call('Audio', { Input: input.id }),
-        extra: [solo, afv, bus('M'), bus('A'), bus('B')],
+        getEq: () => input.settings.audio.eq.on,
+        openEqWin: () => openInputEq(app, input),
+        extra: [solo, afv],
+        buses: BUSES.map(bus),
       });
       s.input = input;
       s.afv = afv;
@@ -217,17 +223,20 @@ export function initAudioMixer(app) {
       s.buses = s.el.querySelectorAll('.bus');
       root.append(s.el);
     }
-    for (const [b, label] of [['A', 'Bus A'], ['B', 'Bus B'], ['M', 'MASTER']]) {
+    for (const b of [...AUX_BUSES, 'M']) {
       const bus = mixer.audio.buses[b];
       const s = makeStrip({
         id: `bus:${b}`,
-        name: label,
+        name: b === 'M' ? 'MASTER' : busLabel(b),
         master: true,
         getVol: () => bus.volume,
-        setVol: (v) => { bus.set(v); refresh(); },
+        setVol: (v) => { bus.set(v); refresh(); mixer.emit('project-changed'); },
         getMute: () => bus.muted,
-        toggleMute: () => { bus.set(undefined, !bus.muted); refresh(); },
+        toggleMute: () => { bus.set(undefined, !bus.muted); refresh(); mixer.emit('project-changed'); },
+        getEq: () => bus.eq.on,
+        openEqWin: () => openBusEq(app, b),
       });
+      if (b === 'M') s.el.classList.add('main');
       root.append(s.el);
     }
     refresh();
@@ -237,6 +246,7 @@ export function initAudioMixer(app) {
     for (const s of strips.values()) {
       if (document.activeElement !== s.fader) s.fader.value = s.getVol();
       s.mute.classList.toggle('active', !!s.getMute());
+      s.eq.classList.toggle('active', !!s.getEq());
       const g = faderToGain(s.getVol());
       s.db.textContent = g <= 0 ? '-∞ dB' : `${gainToDb(g).toFixed(1)} dB`;
       if (s.input) {
@@ -288,6 +298,8 @@ export function initAudioMixer(app) {
   mixer.on('input', refresh);
   mixer.on('onair', refresh);
   mixer.on('api', refresh);
+  mixer.on('project-changed', refresh);
+  mixer.on('project', render);
   render();
   requestAnimationFrame(drawMeters);
 

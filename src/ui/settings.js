@@ -2,6 +2,7 @@
 import { h, modal, tabs, toast } from './dom.js';
 import { pickMime } from '../engine/outputs.js';
 import { fileSource } from './add-input.js';
+import { BUSES, busLabel } from '../engine/audio.js';
 
 const STREAM_PRESETS = {
   Custom: '',
@@ -123,7 +124,7 @@ export function openSettings(app, initialTab) {
   const audio = () => h('div', { class: 'form' },
     h('label', null, 'Monitor (speakers)'), check(mixer.audio.monitorOn, (v) => { mixer.audio.setMonitor(v); s.monitor = v; save(); }),
     h('label', null, 'Monitor bus'), busSel(mixer.audio.monitorBus, (v) => { mixer.audio.setMonitor(mixer.audio.monitorOn, v); s.monitorBus = v; save(); }),
-    h('div', { class: 'full help' }, 'Choose the Mac’s output device (speakers, headphones, audio interface) in System Settings → Sound. Per-input routing to Master / Bus A / Bus B is on each mixer strip.'));
+    h('div', { class: 'full help' }, 'Choose the Mac’s output device (speakers, headphones, audio interface) in System Settings → Sound. Each input can be sent to Master and Buses A–F from its mixer strip. Use the buses for separate mixes, e.g. a clean feed for recording, a mix-minus for remote guests, or a stream mix without the presenter’s talkback.'));
 
   const replay = () => h('div', { class: 'form' },
     ...num('Buffer length (seconds)', s.replaySeconds, 5, 120, (v) => { s.replaySeconds = v; save(); mixer.applyReplaySettings(); }),
@@ -249,7 +250,7 @@ function sel(options, current, onChange) {
 }
 
 function busSel(current, onChange) {
-  return sel([['M', 'Master'], ['A', 'Bus A'], ['B', 'Bus B']], current, onChange);
+  return sel(BUSES.map((b) => [b, busLabel(b)]), current, onChange);
 }
 
 function num(label, value, min, max, onChange) {

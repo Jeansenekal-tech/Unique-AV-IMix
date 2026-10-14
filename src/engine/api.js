@@ -3,7 +3,7 @@
 // widely used by switcher control surfaces (Cut, Fade, PreviewInput,
 // OverlayInput1In, SetText, StartRecording, …).
 import { TRANSITIONS, findTransition } from './transitions.js';
-import { faderToGain } from './audio.js';
+import { faderToGain, BUSES, AUX_BUSES } from './audio.js';
 
 const num = (v, d = 0) => (v === undefined || v === '' || Number.isNaN(Number(v)) ? d : Number(v));
 const bool = (v) => /^(1|true|on|yes)$/i.test(String(v));
@@ -130,8 +130,12 @@ function buildFunctions(app) {
     MasterAudio: () => m.audio.buses.M.set(undefined, !m.audio.buses.M.muted),
     MasterAudioOn: () => m.audio.buses.M.set(undefined, false),
     MasterAudioOff: () => m.audio.buses.M.set(undefined, true),
-    SetBusAVolume: (p) => m.audio.buses.A.set(rel(m.audio.buses.A.volume, p.Value)),
-    SetBusBVolume: (p) => m.audio.buses.B.set(rel(m.audio.buses.B.volume, p.Value)),
+    // EQ (inputs: Input=…, buses: Value=M/A–F)
+    EQOn: (p) => setEq(needInput(m, p).settings.audio.eq, true, () => m.inputChanged(needInput(m, p))),
+    EQOff: (p) => setEq(needInput(m, p).settings.audio.eq, false, () => m.inputChanged(needInput(m, p))),
+    EQ: (p) => { const i = needInput(m, p); setEq(i.settings.audio.eq, !i.settings.audio.eq.on, () => m.inputChanged(i)); },
+    BusXEQOn: (p) => { const b = m.audio.buses[busKey(p.Value)]; if (b) setEq(b.eq, true, () => b.applyEq()); },
+    BusXEQOff: (p) => { const b = m.audio.buses[busKey(p.Value)]; if (b) setEq(b.eq, false, () => b.applyEq()); },
     BusXAudio: (p) => {
       const b = m.audio.buses[busKey(p.Value)];
       if (b) b.set(undefined, !b.muted);
@@ -314,6 +318,15 @@ function buildFunctions(app) {
     if (!F[alias]) F[alias] = (p) => m.transition(findTransition(alias), num(p.Duration, 1000), optInput(m, p)?.id);
   }
 
+  // SetBusAVolume … SetBusFVolume
+  for (const b of AUX_BUSES) F[`SetBus${b}Volume`] = (p) => m.audio.buses[b].set(rel(m.audio.buses[b].volume, p.Value));
+
+  function setEq(eq, on, apply) {
+    eq.on = on;
+    apply();
+    m.emit('project-changed');
+  }
+
   function rel(current, value) {
     const s = String(value ?? '');
     if (/^[+-]/.test(s)) return Math.max(0, Math.min(100, current + Number(s)));
@@ -488,7 +501,7 @@ export class Api {
       if (inp.type === 'list') attrs.push(`selectedIndex="${(inp.index || 0) + 1}"`);
       if (inp.hasAudio) {
         const lv = meters[inp.id] || [0, 0];
-        const buses = ['M', 'A', 'B'].filter((b) => a.buses[b]).join(',');
+        const buses = BUSES.filter((b) => a.buses[b]).join(',');
         attrs.push(`muted="${tf(a.muted)}"`, `volume="${num(a.volume, 2)}"`, `balance="${num(a.balance, 2)}"`, `solo="${tf(m.audio.solo === inp.id)}"`,
           `audiobusses="${buses}"`, `meterF1="${num(lv[0], 5)}"`, `meterF2="${num(lv[1], 5)}"`, `gainDb="${num(a.gain, 1)}"`);
       }
@@ -514,7 +527,7 @@ export class Api {
       + (o.recording ? `<recording duration="${recDuration}">True</recording>` : '<recording>False</recording>')
       + `<external>${tf(s.external)}</external>`
       + `<streaming>${tf(s.streaming)}</streaming><playList>False</playList><multiCorder>False</multiCorder><fullscreen>False</fullscreen>`
-      + `<audio>${bus('master', 'M', ` headphonesVolume="100"`)}${bus('busA', 'A', ' solo="False" sendToMaster="False"')}${bus('busB', 'B', ' solo="False" sendToMaster="False"')}</audio></vmix>`;
+      + `<audio>${bus('master', 'M', ` headphonesVolume="100"`)}${AUX_BUSES.map((b) => bus(`bus${b}`, b, ' solo="False" sendToMaster="False"')).join('')}</audio></vmix>`;
   }
 
   // Activator values for "SUBSCRIBE ACTS" (real-time feedback for control surfaces).
@@ -536,8 +549,7 @@ export class Api {
         out[`InputAudioAuto ${n}`] = b(a.afv);
         out[`InputSolo ${n}`] = b(m.audio.solo === inp.id);
         out[`InputMasterAudio ${n}`] = b(a.buses.M);
-        out[`InputBusAAudio ${n}`] = b(a.buses.A);
-        out[`InputBusBAudio ${n}`] = b(a.buses.B);
+        for (const x of AUX_BUSES) out[`InputBus${x}Audio ${n}`] = b(a.buses[x]);
       }
     });
     m.overlays.forEach((ov, i) => {
@@ -546,10 +558,10 @@ export class Api {
     });
     out.MasterVolume = vol(m.audio.buses.M.volume);
     out.MasterAudio = b(!m.audio.buses.M.muted);
-    out.BusAVolume = vol(m.audio.buses.A.volume);
-    out.BusAAudio = b(!m.audio.buses.A.muted);
-    out.BusBVolume = vol(m.audio.buses.B.volume);
-    out.BusBAudio = b(!m.audio.buses.B.muted);
+    for (const x of AUX_BUSES) {
+      out[`Bus${x}Volume`] = vol(m.audio.buses[x].volume);
+      out[`Bus${x}Audio`] = b(!m.audio.buses[x].muted);
+    }
     out.FadeToBlack = b(m.ftb.on);
     out.Recording = b(o.recording);
     out.Streaming = b(o.streaming);

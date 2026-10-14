@@ -592,6 +592,7 @@ export class Mixer {
       shortcuts: this.shortcuts,
       scripts: this.scripts.map(({ name, code }) => ({ name, code })),
       replay: { source: this.replay.source, speed: this.replay.speed, lastSeconds: this.replay.lastSeconds },
+      audioBuses: this.audio.serializeBuses(),
     };
   }
 
@@ -629,6 +630,7 @@ export class Mixer {
     if (p.shortcuts) this.shortcuts = p.shortcuts;
     if (p.scripts) this.scripts = p.scripts;
     if (p.replay) Object.assign(this.replay, p.replay);
+    if (p.audioBuses) this.audio.restoreBuses(p.audioBuses);
     this.emit('inputs');
     this.emit('state');
     this.emit('project');
