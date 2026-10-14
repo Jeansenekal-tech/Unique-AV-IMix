@@ -11,7 +11,7 @@ A basic video and audio recorder for Windows. It records from:
 
 You can get the `.exe` in either of two ways:
 
-* **From a release.** Push a tag such as `recorder-v1.0.0`. The **Build Windows recorder** workflow then publishes a GitHub Release with both files below.
+* **From a release.** In the **Actions** tab, open **Build Windows recorder → Run workflow** and type a version such as `1.0.1`, or push a tag such as `recorder-v1.0.1`. The workflow then publishes a GitHub Release with both files below.
 * **From any build.** Open the workflow run in the **Actions** tab and download the `Unique-AV-Recorder-windows` artifact.
 
 | File | What it is |
