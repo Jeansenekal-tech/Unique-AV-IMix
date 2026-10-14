@@ -20,28 +20,57 @@ export function openSettings(app, initialTab) {
   const isApp = !!window.imix?.isElectron;
 
   const general = () => {
-    const res = h('select', null, [
-      ['1280x720', 'HD 720p'], ['1920x1080', 'Full HD 1080p'], ['2560x1440', 'QHD 1440p'], ['3840x2160', '4K UHD'],
-      ['1080x1920', 'Vertical 1080×1920 (Reels/Shorts/TikTok)'], ['1080x1080', 'Square 1080×1080'], ['720x576', 'PAL SD'],
-    ].map(([v, l]) => h('option', { value: v, selected: v === `${s.width}x${s.height}` }, l)));
-    const fps = h('select', null, [24, 25, 30, 50, 60].map((f) => h('option', { value: f, selected: f === s.fps }, `${f} fps`)));
+    const PRESETS = [
+      ['1280x720', 'HD 720p'], ['1920x1080', 'Full HD 1080p'], ['2560x1440', 'QHD 1440p'], ['3840x2160', '4K UHD'], ['4096x2160', 'DCI 4K'],
+      ['1080x1920', 'Vertical 1080×1920 (Reels / Shorts / TikTok)'], ['720x1280', 'Vertical 720×1280'], ['1080x1080', 'Square 1080×1080'],
+      ['1920x1200', 'WUXGA 1920×1200 (projectors)'], ['1280x800', 'WXGA 1280×800 (projectors)'], ['3840x1080', 'Ultra-wide 3840×1080 (LED wall)'],
+      ['720x576', 'PAL SD'], ['720x480', 'NTSC SD'],
+    ];
+    const current = `${s.width}x${s.height}`;
+    const isPreset = PRESETS.some(([v]) => v === current);
+    const res = h('select', null, PRESETS.map(([v, l]) => h('option', { value: v, selected: v === current }, l)),
+      h('option', { value: 'custom', selected: !isPreset }, 'Custom…'));
+    const cw = h('input', { type: 'number', min: 64, max: 8192, step: 2, value: s.width, style: { width: '90px' } });
+    const ch = h('input', { type: 'number', min: 64, max: 8192, step: 2, value: s.height, style: { width: '90px' } });
+    const customRow = h('div', { class: 'row' }, cw, h('span', null, '×'), ch, h('span', { class: 'help' }, 'pixels (even numbers, 64–8192)'));
+    const FPS = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 72, 90, 100, 119.88, 120];
+    const fps = h('select', null, FPS.map((f) => h('option', { value: f, selected: f === s.fps }, `${f} fps`)),
+      h('option', { value: 'custom', selected: !FPS.includes(s.fps) }, 'Custom…'));
+    const cf = h('input', { type: 'number', min: 1, max: 240, step: 0.001, value: s.fps, style: { width: '90px' } });
+    const fpsRow = h('div', { class: 'row' }, cf, h('span', { class: 'help' }, 'frames per second (1–240)'));
+    const sync = () => {
+      customRow.style.display = res.value === 'custom' ? 'flex' : 'none';
+      fpsRow.style.display = fps.value === 'custom' ? 'flex' : 'none';
+      if (res.value !== 'custom') [cw.value, ch.value] = res.value.split('x');
+      if (fps.value !== 'custom') cf.value = fps.value;
+    };
+    res.addEventListener('change', sync);
+    fps.addEventListener('change', sync);
+    setTimeout(sync);
     const thumbs = h('select', { onchange: (e) => { s.thumbFps = Number(e.target.value); save(); } },
       [5, 10, 15, 30].map((f) => h('option', { value: f, selected: f === s.thumbFps }, `${f} fps`)));
     return h('div', { class: 'form' },
       h('label', null, 'Output resolution'), res,
+      h('label', null, ''), customRow,
       h('label', null, 'Frame rate'), fps,
+      h('label', null, ''), fpsRow,
       h('label', null, ''), h('button', {
-        class: 'btn small',
+        class: 'btn small primary',
         onclick: () => {
-          const [w, hh] = res.value.split('x').map(Number);
-          mixer.setFormat(w, hh, Number(fps.value));
-          toast(`Output format: ${w}×${hh} @ ${fps.value} fps`);
+          const even = (v) => Math.max(64, Math.min(8192, Math.round(Number(v) / 2) * 2 || 64));
+          const w = even(cw.value);
+          const hh = even(ch.value);
+          const f = Math.max(1, Math.min(240, Number(cf.value) || 30));
+          mixer.setFormat(w, hh, f);
+          cw.value = w;
+          ch.value = hh;
+          toast(`Output format: ${w}×${hh} @ ${f} fps`);
         },
       }, 'Apply format'),
       h('label', null, 'Multiview refresh'), thumbs,
       h('label', null, 'Show overlays on Preview'), check(s.previewOverlays, (v) => { s.previewOverlays = v; save(); }),
       h('label', null, 'Restore last session on launch'), check(s.autoRestoreSession, (v) => { s.autoRestoreSession = v; save(); }),
-      h('div', { class: 'full help' }, 'Higher resolutions and frame rates need more GPU power. Apple Silicon Macs handle 1080p60 comfortably.'));
+      h('div', { class: 'full help' }, 'Any size works, including LED-wall and projector resolutions. Higher resolutions and frame rates need more GPU power – Apple Silicon handles 1080p60 comfortably; 4K60 needs an M-series Pro/Max or better. Streaming services expect standard sizes (e.g. 1920×1080).'));
   };
 
   const recording = () => {

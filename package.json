@@ -13,7 +13,7 @@
     "dist:mac": "electron-builder --mac",
     "dist:mac:arm64": "electron-builder --mac --arm64",
     "dist:mac:x64": "electron-builder --mac --x64",
-    "test": "node test/browser-smoke.mjs",
+    "test": "node test/unit-updater.mjs && node test/unit-sysmon.mjs && node test/countdown-engine-test.cjs && node test/browser-smoke.mjs",
     "test:electron": "xvfb-run -a node test/electron-smoke.mjs",
     "manifest": "node scripts/make-update-manifest.mjs dist"
   },
@@ -34,7 +34,8 @@
       "main/**/*",
       "src/**/*",
       "package.json",
-      "build/icon.png"
+      "build/icon.png",
+      "countdown/**/*"
     ],
     "asarUnpack": [
       "node_modules/ffmpeg-static/**"

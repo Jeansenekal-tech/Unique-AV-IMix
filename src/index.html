@@ -18,6 +18,7 @@
         <span id="streamPill" class="pill stream hidden">● LIVE <span id="streamTime">00:00:00</span> <span id="streamRate"></span></span>
         <span id="extPill" class="pill ext hidden">EXT</span>
         <span id="ftbPill" class="pill ftb hidden">FTB</span>
+        <span id="cdPill" class="pill countdown hidden" title="Countdown – click to open the operator"></span>
         <span id="updatePill" class="pill update hidden" title="Software update"></span>
       </div>
       <div class="topbar-right">
@@ -71,12 +72,13 @@
       <div class="bb-group">
         <button class="btn out" id="bbRecord"><span class="dot"></span> Record</button>
         <button class="btn out" id="bbStream"><span class="dot"></span> Stream</button>
-        <button class="btn out" id="bbExternal">External</button>
+        <button class="btn out" id="bbExternal" title="Video & audio outputs – screens, windows, Blackmagic cards, SRT, audio devices">🖥 Outputs</button>
         <button class="btn out" id="bbMultiview">Multiview</button>
         <button class="btn out" id="bbSnapshot" title="Save a PNG of the output">Snapshot</button>
       </div>
       <div class="bb-group" id="overlayStatus"></div>
       <div class="bb-group right">
+        <button class="btn" id="bbCountdown" title="Unique AV Countdown operator (⇧⌘T)">⏱ Countdown</button>
         <button class="btn" id="bbReplay">⏪ Replay</button>
         <button class="btn" id="bbTools">Tools ▾</button>
         <button class="btn" id="bbProject">Project ▾</button>

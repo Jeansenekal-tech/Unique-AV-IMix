@@ -102,6 +102,8 @@ async function addOfType(app, type) {
       return browserDialog(app);
     case 'url':
       return urlDialog(app);
+    case 'countdown':
+      return countdownDialog(app);
     case 'replay':
       await mixer.addInput({ type: 'replay' });
       toast('Instant Replay input added – replay buffer is recording');
@@ -271,6 +273,24 @@ function browserDialog(app) {
         const [w, hh] = size.value.split('x').map(Number);
         return app.mixer.addInput({ type: 'browser', url: url.value, width: w, height: hh, fps: Number(fps.value), css: css.value });
       },
+    }],
+  });
+}
+
+function countdownDialog(app) {
+  if (!window.imix?.countdownOpen) return toast('The Countdown timer needs the desktop app', 'error');
+  const transparent = h('input', { type: 'checkbox' });
+  modal({
+    title: 'Add Countdown Timer',
+    body: h('div', { class: 'form' },
+      h('label', null, 'Transparent background'), h('div', { class: 'row' }, transparent, h('span', { class: 'help' }, 'for use as an overlay on top of cameras')),
+      h('div', { class: 'full help' }, 'Shows the Unique AV Countdown presenter timer (title, speaker, time, next segment, progress, messages, warning colours) as a mixer input. Run the rundown from the Countdown window (⇧⌘T, or ⏱ in the bottom bar), Companion, OSC, the phone remote or the mixer API.'),
+      h('div', { class: 'full' }, h('button', { class: 'btn small', onclick: () => window.imix.countdownOpen() }, 'Open Countdown operator…'))),
+    width: 560,
+    buttons: [{ label: 'Cancel' }, {
+      label: 'Add',
+      primary: true,
+      onClick: () => app.mixer.addInput({ type: 'countdown', transparent: transparent.checked, title: transparent.checked ? 'Countdown (overlay)' : 'Countdown' }, { select: false }),
     }],
   });
 }

@@ -38,6 +38,7 @@ export class Compositor {
     this.composed = new Map(); // inputId -> RenderTarget
     this.stingerTex = createTexture(gl);
     this.previewCanvas = null;
+    this.extras = new Map(); // source key → { canvas, ctx, users }  (extra video outputs)
     this.frameCount = 0;
     this.resize(canvas.width, canvas.height);
   }
@@ -49,6 +50,52 @@ export class Compositor {
     this.canvas.height = h;
     for (const rt of this.base.values()) rt.resize(w, h);
     for (const rt of this.composed.values()) rt.resize(w, h);
+    for (const ex of this.extras.values()) {
+      ex.canvas.width = w;
+      ex.canvas.height = h;
+    }
+  }
+
+  // Extra full-resolution feeds for video outputs:
+  //   'clean'          program without overlays / fade-to-black
+  //   'preview'        the preview bus
+  //   'input:<id>'     a single input (with its layers)
+  acquireExtra(key) {
+    let ex = this.extras.get(key);
+    if (!ex) {
+      const canvas = document.createElement('canvas');
+      canvas.width = this.W;
+      canvas.height = this.H;
+      ex = { canvas, ctx: canvas.getContext('2d', { alpha: false }), users: 0 };
+      this.extras.set(key, ex);
+    }
+    ex.users++;
+    return ex.canvas;
+  }
+
+  releaseExtra(key) {
+    const ex = this.extras.get(key);
+    if (!ex) return;
+    ex.users--;
+    if (ex.users <= 0) this.extras.delete(key);
+  }
+
+  renderExtras(now) {
+    for (const [key, ex] of this.extras) {
+      this.target(null);
+      this.clear(0, 0, 0, 1);
+      const full = [0, 0, this.W, this.H];
+      if (key === 'clean') {
+        this.renderProgram(now, { overlays: false, ftb: false });
+      } else if (key === 'preview') {
+        const t = this.texFor(this.mixer.previewId);
+        if (t) this.drawTex(t, full);
+      } else if (key.startsWith('input:')) {
+        const t = this.texFor(key.slice(6));
+        if (t) this.drawTex(t, full);
+      }
+      ex.ctx.drawImage(this.canvas, 0, 0);
+    }
   }
 
   dispose(inputId) {
@@ -297,7 +344,10 @@ export class Compositor {
       pc.ctx.drawImage(this.canvas, 0, 0, this.W, this.H, 0, 0, pc.width, pc.height);
     }
 
-    // 5. program (left on the canvas → monitor, recording, streaming)
+    // 5. extra output feeds (clean / preview / single input)
+    if (this.extras.size) this.renderExtras(now);
+
+    // 6. program (left on the canvas → monitor, recording, streaming)
     this.renderProgram(now);
   }
 
@@ -315,7 +365,11 @@ export class Compositor {
         const x = (i % cols) * THUMB_W;
         const y = Math.floor(i / cols) * THUMB_H;
         const t = inp.hasVideo ? this.texFor(inp.id) : null;
-        if (t) this.drawTex(t, [x, y, THUMB_W, THUMB_H]);
+        // keep the output's aspect (vertical / ultra-wide formats) inside the 16:9 tile
+        const k = Math.min(THUMB_W / this.W, THUMB_H / this.H);
+        const tw = this.W * k;
+        const th = this.H * k;
+        if (t) this.drawTex(t, [x + (THUMB_W - tw) / 2, y + (THUMB_H - th) / 2, tw, th]);
       });
       batch.forEach((inp, i) => {
         const x = (i % cols) * THUMB_W;
@@ -338,7 +392,7 @@ export class Compositor {
     }
   }
 
-  renderProgram(now) {
+  renderProgram(now, { overlays = true, ftb: withFtb = true } = {}) {
     const { gl } = this;
     const m = this.mixer;
     this.target(null);
@@ -372,7 +426,7 @@ export class Compositor {
       if (t) this.drawTex(t, full);
     }
 
-    this.drawOverlays(now);
+    if (overlays) this.drawOverlays(now);
 
     // stinger graphic on top
     if (tr && tr.def.id === 'stinger') {
@@ -390,7 +444,7 @@ export class Compositor {
       }
     }
 
-    const ftb = m.ftbAlpha(now);
+    const ftb = withFtb ? m.ftbAlpha(now) : 0;
     if (ftb > 0) this.drawSolid(full, [0, 0, 0, ftb]);
   }
 

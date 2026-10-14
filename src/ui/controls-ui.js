@@ -91,11 +91,29 @@ export function initMonitors(app) {
     const next = h('button', { class: 'btn small', title: 'Next item', onclick: () => getInput()?.next?.() }, '⏭');
     const time = h('span', { class: 'time' });
     const info = h('span', { class: 'help' });
-    el.append(restart, play, next, seek, time, info);
+    const speed = h('select', {
+      class: 'speed-sel',
+      title: 'Playback speed',
+      onchange: (e) => { const i = getInput(); if (i?.supportsRate) i.setRate(Number(e.target.value)); },
+    }, [0.1, 0.25, 0.33, 0.5, 0.75, 1, 1.25, 1.5, 2].map((r) => h('option', { value: r }, `${r}×`)));
+    const slow = h('button', {
+      class: 'btn small slowmo',
+      title: 'Slow motion on/off (speed set in input settings)',
+      onclick: () => getInput()?.toggleSlowMo?.(),
+    }, 'SLOW-MO');
+    el.append(restart, play, next, seek, time, speed, slow, info);
     return () => {
       const i = getInput();
       const playable = i && ['video', 'list', 'audiofile', 'url'].includes(i.type);
-      [play, restart, seek].forEach((x) => { x.style.visibility = playable ? 'visible' : 'hidden'; });
+      [play, restart, seek, speed, slow].forEach((x) => { x.style.visibility = playable ? 'visible' : 'hidden'; });
+      if (playable) {
+        const r = i.settings.rate || 1;
+        if (document.activeElement !== speed) {
+          if (![...speed.options].some((o) => Number(o.value) === r)) speed.append(h('option', { value: r }, `${r}×`));
+          speed.value = String(r);
+        }
+        slow.classList.toggle('active', r < 1);
+      }
       next.style.display = i && i.type === 'list' ? '' : 'none';
       if (playable) {
         if (document.activeElement !== seek) seek.value = i.duration ? (i.position / i.duration) * 1000 : 0;

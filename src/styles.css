@@ -43,6 +43,10 @@ body.web #topbar { padding-left: 14px; }
 .pill.rec { background: var(--program); color: #fff; animation: pulse 1.6s infinite; }
 .pill.stream { background: #c2185b; color: #fff; }
 .pill.ext { background: var(--accent); color: #fff; }
+.pill.countdown { cursor: pointer; background: var(--bg3); color: var(--text); font-size: 12px; }
+.pill.countdown.running { background: #1f3a2c; color: #7ee2a8; }
+.pill.countdown.warning { background: #4a3a0b; color: #ffd566; }
+.pill.countdown.critical, .pill.countdown.overtime { background: #5a1418; color: #ff9a9e; }
 .pill.update { background: var(--bg4); color: var(--text); cursor: pointer; }
 .pill.update.ready { background: var(--preview); color: #fff; animation: pulse 2s infinite; }
 .pill.ftb { background: #000; color: #fff; border: 1px solid #fff; animation: pulse 1s infinite; }
@@ -63,6 +67,9 @@ body.web #topbar { padding-left: 14px; }
 .transport { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-top: 1px solid var(--line); min-height: 38px; }
 .transport .time { font: 12px var(--mono); color: var(--text2); min-width: 120px; text-align: right; }
 .transport .seek { flex: 1; }
+.transport .speed-sel { width: 62px; }
+.btn.slowmo { font-weight: 700; font-size: 10.5px; }
+.btn.slowmo.active { background: var(--warn); border-color: var(--warn); color: #000; }
 
 /* ---------------------------------------------------------- transitions */
 #transitions { display: flex; flex-direction: column; gap: 6px; background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; overflow: auto; }
@@ -248,3 +255,12 @@ table.list th { color: var(--text3); font-weight: 600; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: #353b47; border-radius: 5px; border: 2px solid var(--bg2); }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* outputs window */
+.output-card { background: var(--bg3); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+.output-card.live { border-color: var(--program); box-shadow: 0 0 0 1px var(--program) inset; }
+.output-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.output-head .output-name { flex: 1; font-weight: 600; }
+.live-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text3); flex: none; }
+.output-card.live .live-dot { background: var(--program); animation: pulse 1s infinite; }
+.warn-box { background: rgba(245,165,36,.1); border: 1px solid rgba(245,165,36,.35); border-radius: 6px; padding: 8px 10px; color: var(--text2); }

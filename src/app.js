@@ -2,6 +2,7 @@
 import { Mixer } from './engine/mixer.js';
 import { Compositor } from './engine/compositor.js';
 import { Outputs } from './engine/outputs.js';
+import { VideoOutputs } from './engine/video-outputs.js';
 import { Api } from './engine/api.js';
 import { Shortcuts, Scripts } from './engine/automation.js';
 import { h, $, toast, modal, fmtTime, contextMenu } from './ui/dom.js';
@@ -10,6 +11,7 @@ import { initTransitions, initMonitors, initAudioMixer, initOverlayStatus } from
 import { showAddInput } from './ui/add-input.js';
 import { openSettings } from './ui/settings.js';
 import { openReplay, openScripts, openShortcuts, openLog, openHelp, openApiHelp } from './ui/panels.js';
+import { openOutputsPanel } from './ui/outputs-panel.js';
 
 const imix = window.imix;
 const AUTOSAVE_KEY = 'imix.autosave';
@@ -197,7 +199,8 @@ function initBottombar() {
   $('#bbAdd').onclick = () => showAddInput(app);
   $('#bbRecord').onclick = () => run(outputs.toggleRecording());
   $('#bbStream').onclick = () => run(outputs.toggleStreaming());
-  $('#bbExternal').onclick = () => run(outputs.status().external ? outputs.closeExternal() : chooseDisplay('External Output', (id) => outputs.openExternal(id)));
+  $('#bbExternal').onclick = () => openOutputsPanel(app);
+  if (!imix) $('#bbCountdown').onclick = () => toast('The Countdown timer is part of the desktop app', 'error');
   $('#bbMultiview').onclick = () => run(outputs.status().multiview ? outputs.multiviewWin.close() : chooseDisplay('Multiview Output', (id) => outputs.openMultiview(id)));
   $('#bbSnapshot').onclick = () => run(outputs.snapshot());
   $('#bbReplay').onclick = () => openReplay(app);
@@ -228,7 +231,8 @@ function initBottombar() {
     const st = outputs.status();
     $('#bbRecord').classList.toggle('active', st.recording);
     $('#bbStream').classList.toggle('active', st.streaming);
-    $('#bbExternal').classList.toggle('active', st.external);
+    $('#bbExternal').classList.toggle('active', st.external || app.videoOutputs.runtime.size > 0);
+    $('#bbExternal').textContent = app.videoOutputs.runtime.size ? `🖥 Outputs (${app.videoOutputs.runtime.size})` : '🖥 Outputs';
     $('#bbMultiview').classList.toggle('active', st.multiview);
   };
   mixer.on('outputs', upd);
@@ -298,7 +302,7 @@ function initBridge() {
       case 'addInput': return showAddInput(app, arg);
       case 'record': return run(outputs.toggleRecording());
       case 'stream': return run(outputs.toggleStreaming());
-      case 'external': return $('#bbExternal').click();
+      case 'external': return openOutputsPanel(app);
       case 'multiview': return $('#bbMultiview').click();
       case 'scripts': return openScripts(app);
       case 'shortcuts': return openShortcuts(app);
@@ -315,6 +319,22 @@ function initBridge() {
     if (st.error) toast(`API: ${st.error}`, 'error');
   };
   app.updateApiStatus = updateApi;
+  // Countdown (Unique AV Countdown) status in the top bar
+  const cdPill = $('#cdPill');
+  cdPill.onclick = () => imix.countdownOpen();
+  $('#bbCountdown').onclick = () => imix.countdownOpen();
+  let cdLast = 0;
+  imix.onCountdownTick((snap) => {
+    app.countdown = snap;
+    const now = performance.now();
+    if (now - cdLast < 200) return;
+    cdLast = now;
+    const show = snap.running || snap.phase === 'overtime' || snap.messageVisible;
+    cdPill.classList.toggle('hidden', !show);
+    if (!show) return;
+    cdPill.textContent = `⏱ ${snap.time}${snap.title ? ` · ${snap.title}` : ''}${snap.running ? '' : ' ❚❚'}`;
+    cdPill.className = `pill countdown ${snap.running ? 'running' : ''} ${snap.phase}`;
+  });
   initUpdates();
   imix.apiConfigure(mixer.settings.api).then(updateApi);
 }
@@ -399,6 +419,8 @@ async function main() {
 
   app.outputs = new Outputs(mixer, canvas);
   mixer.outputs = app.outputs;
+  mixer.app = app;
+  app.videoOutputs = new VideoOutputs(app);
   app.api = new Api(app);
   app.shortcuts = new Shortcuts(app);
   app.scripts = new Scripts(app);
@@ -450,6 +472,7 @@ async function main() {
   }
   app.ready = true;
   mixer.emit('ready');
+  app.videoOutputs.openAutoStart();
 }
 
 main().catch((e) => {

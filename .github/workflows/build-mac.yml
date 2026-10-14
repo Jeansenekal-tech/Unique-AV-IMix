@@ -25,6 +25,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: node test/unit-updater.mjs
       - run: node test/unit-sysmon.mjs
+      - run: node test/countdown-engine-test.cjs
       - run: node test/browser-smoke.mjs
       - run: xvfb-run -a node test/electron-smoke.mjs
 

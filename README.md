@@ -23,6 +23,7 @@ It is an Electron app. Compositing runs on the GPU (WebGL/Metal), audio mixing u
 | **Web browser** | Any web page rendered offscreen, with transparency and custom CSS. Use it for HTML graphics and widgets. |
 | **Stream URL** | Direct media URLs. |
 | **Instant replay** | Shows the replay buffer as an input. |
+| **Countdown Timer** | The Unique AV Countdown presenter timer as an input, with an optional transparent background for overlays. |
 
 Add inputs from the **＋ Add Input** button or the **Input** menu, or drop files onto the inputs area. Drag tiles to reorder them.
 
@@ -49,10 +50,43 @@ Add inputs from the **＋ Add Input** button or the **Input** menu, or drop file
 ### Outputs
 * **Record** to MP4 (H.264/AAC) or WebM. Files are finalised with FFmpeg so they seek correctly.
 * **Stream** to up to 3 destinations at once over RTMP, RTMPS or SRT. Presets cover YouTube, Twitch, Facebook and Restream. Encoding uses Apple VideoToolbox (hardware) or x264.
-* **External output:** full-screen program output on any display, for projectors and LED walls.
-* **Multiview output:** preview, program and every input with tally and labels on a second display.
+* **Unlimited outputs** (*🖥 Outputs*). Add as many as you need. Each output has its own:
+  * **Source:** Program, Clean feed (program without overlays), Preview, Multiview or any single input.
+  * **Destination:**
+    * **Display, full screen:** any screen macOS sees, including HDMI, DisplayPort, USB-C/Thunderbolt adapters, AirPlay displays, and playout or capture devices that show up as a display.
+    * **Window.**
+    * **Blackmagic DeckLink / UltraStudio card:** through FFmpeg, see below.
+    * **Network stream:** SRT, RTMP or UDP.
+    * **Audio device only.**
+  * **Audio:** any bus, sent to any audio device (audio interfaces, HDMI/SDI embedders, AirPlay speakers).
+  * Outputs can start automatically with the project, and are controlled with `OutputOn`, `OutputOff`, `OutputToggle` and `SetOutputSource` from the API, Companion and shortcuts.
+* **Blackmagic DeckLink / UltraStudio output** needs Blackmagic Desktop Video and an FFmpeg built with `--enable-decklink`. The bundled FFmpeg can't include DeckLink support for licensing reasons, so set the path to your own build in *Settings → Streaming*. Your cards then appear in the Outputs window. The card plays the mixer format, which must be a mode the card supports, such as 1080p25, 1080p29.97 or 1080p50. Expect around 0.3–0.5 s of latency.
+* **Multiview output:** preview, program and every input with tally and labels.
 * **Snapshot:** saves a PNG of the output.
 * **Instant replay:** a rolling buffer of the output or any input. Play back the last N seconds in slow motion (0.1×–1×) and save Mark In/Out events.
+
+### Slow motion
+* Every video, playlist and audio-file input has a **playback speed** from 0.1× to 2×. You can choose to keep the audio pitch.
+* The Preview and Output transports have a **speed menu** and a **SLOW-MO** button that switches between 1× and the input's slow-motion speed.
+* API functions: `SetRate Input=… Value=0.5`, `SlowMotion` (toggle) and `SlowMotionOff`.
+* For live cameras, use **Instant Replay**. It buffers the source and plays it back at 0.1×–1×.
+
+### Custom output formats
+* Any resolution from 64×64 to 8192×8192, including projector, LED-wall, vertical and DCI sizes, plus presets.
+* Any frame rate from 1 to 240, including 23.976, 29.97, 59.94 and 119.88.
+
+### Countdown timer (Unique AV Countdown, built in)
+The whole [Unique AV Countdown](https://github.com/Jeansenekal-tech/UniqueAVCountdown) app runs inside Streaming GuRu. Open it with **⏱ Countdown** or ⇧⌘T. The upstream commit it came from is recorded in `countdown/UPSTREAM_COMMIT`. It includes:
+* The **operator window** with its rundown: countdown, count-up and end-at-time-of-day segments, with warnings, sounds, auto-advance and a quick timer.
+* The **presenter screen** on any display, with messages, flash, blackout and video PIP layouts with crop.
+* The **phone remote** on port 8080, **OSC** on UDP 8000 and **MIDI**. Existing Companion, OSC and MIDI setups keep working unchanged.
+* A **Countdown menu** in the menu bar.
+* Your existing rundown and settings from the standalone app are imported automatically the first time.
+
+It also connects to the mixer:
+* **Countdown Timer input:** the presenter timer as a source you can cut to or use as an overlay (transparent option).
+* A **top-bar timer** that turns yellow and red with the warning times.
+* **API functions:** `CountdownStart`, `CountdownPause`, `CountdownToggle`, `CountdownNext`, `CountdownPrevious`, `CountdownReset`, `CountdownAdd`, `CountdownSubtract`, `CountdownGoto`, `CountdownQuick`, `CountdownMessage`, `CountdownFlash`, `CountdownHideMessage`, `CountdownBlackout`, `CountdownLayout`, `CountdownVideo` and `CountdownPresenter`. These work from the Companion vMix module, Stream Deck, shortcuts and scripts.
 
 ### Automation and remote control
 * **Keyboard shortcuts.** You can fully customise them, and a learn mode captures new keys.
@@ -121,6 +155,7 @@ Pushing a `v*` tag makes the workflow build both DMGs, set the app version from 
 ```sh
 node test/unit-updater.mjs                  # updater version logic + release manifest
 node test/unit-sysmon.mjs                   # GPU utilisation parsing
+node test/countdown-engine-test.cjs         # Unique AV Countdown engine + OSC (upstream tests)
 node test/browser-smoke.mjs                 # UI + engine in headless Chromium (needs playwright + ffmpeg)
 xvfb-run -a node test/electron-smoke.mjs    # full app: HTTP/TCP API, recording, FFmpeg streaming, browser input
 ```
@@ -184,6 +219,9 @@ main/ffmpeg.js          FFmpeg discovery, live streaming (tee muxer → RTMP/SRT
 main/api-server.js      HTTP + TCP control API and web controller
 main/browser-input.js   Offscreen Chromium pages for web browser inputs
 main/sysmon.js          CPU / GPU / RAM monitor for the status bar
+main/countdown-host.js  Hosts Unique AV Countdown (engine, windows, remote, OSC, mixer bridge)
+countdown/              Unique AV Countdown sources (engine, OSC, phone remote, operator + presenter UI)
+src/engine/video-outputs.js  Unlimited outputs (displays, windows, DeckLink, SRT/RTMP/UDP, audio devices)
 main/updater.js         Auto-update (manifest check, verified download, bundle swap)
 scripts/                Release manifest generator, ad-hoc signing hook
 preload.js              window.imix bridge

@@ -12,6 +12,7 @@ const { ApiServer } = require('./main/api-server');
 const { BrowserInputs } = require('./main/browser-input');
 const { Updater } = require('./main/updater');
 const { SystemMonitor } = require('./main/sysmon');
+const { CountdownHost } = require('./main/countdown-host');
 const pkg = require('./package.json');
 
 const APP_NAME = 'Unique AV Streaming GuRu';
@@ -36,6 +37,7 @@ const recordings = new Map();
 let quitting = false;
 
 const streamer = new ffmpeg.Streamer((ev) => send('stream-event', ev));
+const deviceOutputs = new ffmpeg.DeviceOutputs((ev) => send('output-event', ev));
 const browserInputs = new BrowserInputs(() => mainWindow && mainWindow.webContents);
 const updater = new Updater({
   defaultUrl: process.env.UASG_UPDATE_URL || pkg.updateUrl || '',
@@ -81,6 +83,17 @@ const apiServer = new ApiServer(
 ipcMain.on('api-tally', (_e, tally) => apiServer.pushTally(tally));
 ipcMain.on('api-acts', (_e, acts) => apiServer.pushActs(acts));
 const sysmon = new SystemMonitor((stats) => send('sysmon', stats));
+const countdown = new CountdownHost({
+  getMainWindow: () => mainWindow,
+  onUpdateCheck: () => {
+    updater.check(true);
+    send('menu', { cmd: 'settings', arg: 'updates' });
+  },
+  updateStatus: () => {
+    const st = updater.status();
+    return st.status === 'uptodate' ? `Up to date (${st.current})` : st.status === 'error' ? `Update check failed: ${st.error}` : `Updates: ${st.status}${st.latest ? ` ${st.latest}` : ''}`;
+  },
+});
 
 function send(channel, data) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, data);
@@ -111,7 +124,7 @@ function createMainWindow() {
   // External output window, opened from the renderer with window.open so it
   // can share the program MediaStream directly.
   mainWindow.webContents.setWindowOpenHandler(({ frameName, url }) => {
-    if (frameName === 'imix-output' || frameName === 'imix-multiview') {
+    if (frameName === 'imix-output' || frameName === 'imix-multiview' || frameName.startsWith('imix-out-')) {
       const displays = screen.getAllDisplays();
       const d = displays.find((x) => String(x.id) === String(outputTarget.displayId))
         || displays.find((x) => x.id !== screen.getPrimaryDisplay().id)
@@ -126,7 +139,7 @@ function createMainWindow() {
           height: fullscreen ? d.bounds.height : 540,
           fullscreen,
           backgroundColor: '#000000',
-          title: frameName === 'imix-output' ? `${APP_NAME} – Output` : `${APP_NAME} – Multiview`,
+          title: frameName === 'imix-multiview' ? `${APP_NAME} – Multiview` : `${APP_NAME} – ${outputTarget.title || 'Output'}`,
           autoHideMenuBar: true,
           webPreferences: { backgroundThrottling: false },
         },
@@ -154,6 +167,8 @@ function createMainWindow() {
   });
   mainWindow.on('closed', () => {
     mainWindow = null;
+    // The Countdown operator lives on hidden; closing the mixer quits the app.
+    app.quit();
     streamer.stop();
     browserInputs.closeAll();
   });
@@ -226,6 +241,7 @@ function buildMenu() {
         { label: 'Recording & Streaming Settings…', click: menuCommand('settings', 'outputs') },
       ],
     },
+    countdown.menuTemplate(),
     {
       label: 'Tools',
       submenu: [
@@ -327,6 +343,18 @@ function registerIpc() {
     return true;
   });
 
+  // Device / network outputs (DeckLink, SRT, RTMP, UDP …) – any number at once
+  ipcMain.handle('output:devices', () => ffmpeg.listDecklink());
+  ipcMain.handle('output:start', (_e, id, opts) => {
+    try {
+      return deviceOutputs.start(id, opts);
+    } catch (err) {
+      return { ok: false, message: err.message };
+    }
+  });
+  ipcMain.on('output:chunk', (_e, id, data) => deviceOutputs.write(id, data));
+  ipcMain.handle('output:stop', (_e, id) => deviceOutputs.stop(id));
+
   ipcMain.handle('ffmpeg:info', () => ffmpeg.ffmpegInfo());
   ipcMain.handle('ffmpeg:setPath', (_e, p) => {
     ffmpeg.setCustomPath(p);
@@ -406,12 +434,13 @@ app.whenReady().then(async () => {
 
   const ses = session.defaultSession;
   ses.setPermissionRequestHandler((wc, permission, cb) => {
-    const allowed = ['media', 'display-capture', 'midi', 'midiSysex', 'clipboard-read', 'clipboard-sanitized-write', 'fullscreen', 'notifications'];
-    cb(wc.getURL().startsWith(`${SCHEME}://`) && allowed.includes(permission));
+    const allowed = ['media', 'display-capture', 'midi', 'midiSysex', 'speaker-selection', 'clipboard-read', 'clipboard-sanitized-write', 'fullscreen', 'notifications'];
+    const url = wc.getURL();
+    cb((url.startsWith(`${SCHEME}://`) || url.startsWith('app://ui/')) && allowed.includes(permission));
   });
   ses.setPermissionCheckHandler((wc, permission) => {
     const url = wc ? wc.getURL() : '';
-    return url.startsWith(`${SCHEME}://`) || permission === 'media';
+    return url.startsWith(`${SCHEME}://`) || url.startsWith('app://ui/') || permission === 'media';
   });
   // getDisplayMedia() → use the source picked in the in-app screen picker.
   ses.setDisplayMediaRequestHandler(async (_req, cb) => {
@@ -433,9 +462,11 @@ app.whenReady().then(async () => {
   });
 
   registerIpc();
+  countdown.start();
   buildMenu();
   createMainWindow();
   sysmon.start();
+  countdown.createOperator(); // hidden; keeps presenter/MIDI/sounds alive
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
@@ -445,9 +476,11 @@ app.whenReady().then(async () => {
 app.on('before-quit', () => {
   quitting = true;
   sysmon.stop();
+  countdown.stop();
   // A downloaded update is installed when the app quits (no relaunch).
   if (updater.state.status === 'ready' && !updater.installing) updater.install({ relaunch: false, force: true });
   streamer.stop();
+  deviceOutputs.stopAll();
   browserInputs.closeAll();
   apiServer.stop();
 });

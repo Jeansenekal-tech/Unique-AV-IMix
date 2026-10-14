@@ -205,6 +205,22 @@ r = await page.evaluate(async () => {
 });
 check(r === 'Paused', `auto-pause off air (${r})`);
 
+// Slow motion (per-input playback speed)
+r = await page.evaluate(async () => {
+  const v = imixApp.mixer.getInput(5);
+  await imixApp.api.call('SetRate', { Input: 5, Value: 0.25 });
+  const a = v.el.playbackRate;
+  await imixApp.api.call('SlowMotion', { Input: 5 }); // toggle back to 1×
+  const b = v.el.playbackRate;
+  await imixApp.api.call('SlowMotion', { Input: 5 }); // slow-mo speed (0.5×)
+  const c = v.el.playbackRate;
+  await imixApp.api.call('SlowMotionOff', { Input: 5 });
+  const bad = await imixApp.api.call('SetRate', { Input: 1, Value: 0.5 });
+  return { a, b, c, d: v.el.playbackRate, bad: bad.ok };
+});
+check(r.a === 0.25 && r.b === 1 && r.c === 0.5 && r.d === 1, `slow motion speeds (${r.a}× → ${r.b}× → ${r.c}× → ${r.d}×)`);
+check(r.bad === false, 'speed rejected for non-media inputs');
+
 // Camera (fake device)
 r = await page.evaluate(async () => {
   const inp = await imixApp.mixer.addInput({ type: 'camera', width: 640, height: 480 });
@@ -254,6 +270,55 @@ r = (await px()).avg;
 check(r < 2, `fade to black (avg ${r.toFixed(1)})`);
 await page.evaluate(() => imixApp.api.call('FadeToBlack'));
 await page.waitForTimeout(1200);
+
+// Custom output format (any size, fractional frame rate)
+r = await page.evaluate(async () => {
+  const m = imixApp.mixer;
+  m.setFormat(1000, 562, 29.97);
+  await new Promise((res) => setTimeout(res, 600));
+  const c = document.getElementById('programCanvas');
+  const out = { w: c.width, h: c.height, fps: m.settings.fps, label: document.getElementById('formatLabel').textContent, rendering: m.stats.fps > 0 };
+  m.setFormat(640, 360, 30);
+  return out;
+});
+check(r.w === 1000 && r.h === 562 && r.fps === 29.97 && /1000×562 29\.97p/.test(r.label), `custom format 1000×562 @ 29.97 (${r.label})`);
+
+// Unlimited outputs: several outputs with different sources at once
+r = await page.evaluate(async () => {
+  const m = imixApp.mixer;
+  const vo = imixApp.videoOutputs;
+  m.cut(1);
+  m.overlay(0, 3, 'in'); // lower third over program
+  await new Promise((res) => setTimeout(res, 700));
+  const outs = [
+    vo.add({ source: 'program', target: 'window' }),
+    vo.add({ source: 'clean', target: 'window' }),
+    vo.add({ source: `input:${m.getInput(2).id}`, target: 'window' }),
+    vo.add({ source: 'preview', target: 'window' }),
+  ];
+  for (const o of outs) await vo.open(o.id);
+  await new Promise((res) => setTimeout(res, 1200));
+  const sample = (canvas, x, y) => {
+    const t = document.createElement('canvas');
+    t.width = 64; t.height = 36;
+    t.getContext('2d').drawImage(canvas, 0, 0, 64, 36);
+    return [...t.getContext('2d').getImageData(x, y, 1, 1).data.slice(0, 3)];
+  };
+  const clean = m.compositor.extras.get('clean').canvas;
+  const prog = document.getElementById('programCanvas');
+  // lower third bar sits bottom-left (≈ x 10–30 %, y 85 %)
+  const progPx = sample(prog, 10, 28); // red name bar of the lower third
+  const cleanPx = sample(clean, 10, 28);
+  const windows = outs.map((o) => { const rt = vo.runtime.get(o.id); const v = rt?.win?.document.getElementById('out'); return !!(v && v.srcObject && v.srcObject.getVideoTracks().length); });
+  const extras = [...m.compositor.extras.keys()].sort().join(',');
+  for (const o of outs) vo.remove(o.id);
+  m.overlay(0, null, 'off');
+  return { windows, extras, progPx, cleanPx, left: m.compositor.extras.size, open: vo.runtime.size };
+});
+check(r.windows.every(Boolean) && r.windows.length === 4, `4 outputs open at once, each receiving video (${r.windows})`);
+check(/clean/.test(r.extras) && /preview/.test(r.extras) && /input:/.test(r.extras), `separate feeds rendered (${r.extras})`);
+check(JSON.stringify(r.progPx) !== JSON.stringify(r.cleanPx), `clean feed has no overlay (program ${r.progPx} vs clean ${r.cleanPx})`);
+check(r.left === 0 && r.open === 0, 'feeds released when outputs close');
 
 // Replay buffer
 r = await page.evaluate(async () => {

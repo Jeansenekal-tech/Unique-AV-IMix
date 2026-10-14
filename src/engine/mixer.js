@@ -593,6 +593,7 @@ export class Mixer {
       scripts: this.scripts.map(({ name, code }) => ({ name, code })),
       replay: { source: this.replay.source, speed: this.replay.speed, lastSeconds: this.replay.lastSeconds },
       audioBuses: this.audio.serializeBuses(),
+      videoOutputs: this.videoOutputs || [],
     };
   }
 
@@ -631,6 +632,10 @@ export class Mixer {
     if (p.scripts) this.scripts = p.scripts;
     if (p.replay) Object.assign(this.replay, p.replay);
     if (p.audioBuses) this.audio.restoreBuses(p.audioBuses);
+    if (Array.isArray(p.videoOutputs) && p.videoOutputs.length) {
+      this.app?.videoOutputs?.closeAll();
+      this.videoOutputs = p.videoOutputs;
+    }
     this.emit('inputs');
     this.emit('state');
     this.emit('project');

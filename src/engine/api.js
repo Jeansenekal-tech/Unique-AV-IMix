@@ -89,6 +89,18 @@ function buildFunctions(app) {
     },
     NextItem: (p) => needInput(m, p).next?.(),
     PreviousItem: (p) => needInput(m, p).previous?.(),
+    SetRate: (p) => {
+      const i = needInput(m, p);
+      if (!i.supportsRate) throw new Error('Speed applies to video, list and audio file inputs');
+      i.setRate(num(p.Value, 1));
+    },
+    SlowMotion: (p) => {
+      const i = needInput(m, p);
+      if (!i.supportsRate) throw new Error('Slow motion applies to video, list and audio file inputs (use Instant Replay for live sources)');
+      if (p.Value != null && p.Value !== '') i.setRate(num(p.Value, 0.5));
+      else i.toggleSlowMo();
+    },
+    SlowMotionOff: (p) => needInput(m, p).setRate?.(1),
     SelectIndex: (p) => needInput(m, p).load?.(num(p.Value, 1) - 1, true),
 
     // --------------------------------------------------------------- audio
@@ -289,6 +301,43 @@ function buildFunctions(app) {
     NextPlayListEntry: (p) => (optInput(m, p) || m.getInput(m.previewId))?.next?.(),
     PreviousPlayListEntry: (p) => (optInput(m, p) || m.getInput(m.previewId))?.previous?.(),
 
+    // ------------------------------------------------- unlimited outputs
+    OutputOn: (p) => vo().open(p.Value ?? p.Output ?? 1),
+    OutputOff: (p) => vo().close(p.Value ?? p.Output ?? 1),
+    OutputToggle: (p) => vo().toggle(p.Value ?? p.Output ?? 1),
+    OutputAdd: (p) => vo().add({ name: p.Value || undefined }),
+    SetOutputSource: (p) => {
+      const src = String(p.Source ?? p.Input ?? 'program');
+      const map = { program: 'program', output: 'program', clean: 'clean', cleanfeed: 'clean', preview: 'preview', multiview: 'multiview' };
+      let source = map[src.toLowerCase().replace(/\s+/g, '')];
+      if (!source) {
+        const inp = m.getInput(src);
+        if (!inp) throw new Error(`Unknown source ${src}`);
+        source = `input:${inp.id}`;
+      }
+      return vo().setSource(p.Value ?? p.Output ?? 1, source);
+    },
+
+    // --------------------------------------- Unique AV Countdown (integrated)
+    CountdownOpen: () => window.imix?.countdownOpen(),
+    CountdownPresenter: () => window.imix?.countdownPresenter(),
+    CountdownToggle: () => cd('toggle'),
+    CountdownStart: () => cd('start'),
+    CountdownPause: () => cd('pause'),
+    CountdownReset: () => cd('reset'),
+    CountdownNext: () => cd('next'),
+    CountdownPrevious: () => cd('prev'),
+    CountdownAdd: (p) => cd('add', p.Value ?? 60),
+    CountdownSubtract: (p) => cd('sub', p.Value ?? 60),
+    CountdownGoto: (p) => cd('goto', p.Value),
+    CountdownQuick: (p) => cd('quick', p.Value ?? 300),
+    CountdownMessage: (p) => cd('message', p.Value),
+    CountdownFlash: (p) => cd('flash', p.Value),
+    CountdownHideMessage: () => cd('message-hide'),
+    CountdownBlackout: (p) => cd('blackout', p.Value),
+    CountdownLayout: (p) => cd('layout', p.Value),
+    CountdownVideo: (p) => cd('video', p.Value),
+
     // -------------------------------------------------------------- scripts
     ScriptStart: (p) => app.scripts.start(p.Value),
     ScriptStop: (p) => app.scripts.stop(p.Value),
@@ -366,6 +415,18 @@ function buildFunctions(app) {
     if (/^[+-]/.test(s) && key !== 'opacity') v = i.settings[key] + num(s);
     i.settings[key] = key === 'zoom' ? Math.max(0, v) : v;
     m.inputChanged(i);
+  }
+
+  function vo() {
+    if (!app.videoOutputs) throw new Error('Outputs not ready');
+    return app.videoOutputs;
+  }
+
+  async function cd(command, value) {
+    if (!window.imix?.countdownCmd) throw new Error('The Countdown timer needs the desktop app');
+    const ok = await window.imix.countdownCmd(command, value == null ? null : String(value));
+    if (ok === false) throw new Error(`Countdown: unknown command ${command}`);
+    return true;
   }
 
   function setFlag(p, key, v) {
@@ -477,6 +538,7 @@ export class Api {
       external: o.status().external,
       replay: { recording: m.replay.recording, playing: m.replay.playing, events: m.replay.events.length },
       transitionProgress: m.trans ? m.transProgress(now) : 0,
+      countdown: this.app.countdown || null,
       system: { ...(this.app.system || {}), fps: Math.round(m.stats.fps * 10) / 10, frameMs: Math.round(m.stats.frameMs * 10) / 10 },
     };
   }

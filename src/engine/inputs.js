@@ -21,6 +21,7 @@ export const INPUT_TYPES = {
   browser: { label: 'Web Browser', icon: '🌐' },
   url: { label: 'Stream URL', icon: '📡' },
   replay: { label: 'Instant Replay', icon: '⏪' },
+  countdown: { label: 'Countdown Timer', icon: '⏱' },
 };
 
 export function defaultSettings() {
@@ -40,6 +41,9 @@ export function defaultSettings() {
     autoPlay: true,
     autoPause: true,
     autoRestart: false,
+    rate: 1, // playback speed (slow motion < 1)
+    preservePitch: true,
+    slowMoRate: 0.5,
     audio: {
       volume: 100,
       balance: 0,
@@ -132,6 +136,30 @@ export class Input {
     this.onAir = on;
   }
 
+  // Playback speed for file-based inputs (slow motion / fast forward).
+  get supportsRate() {
+    return ['video', 'list', 'audiofile', 'url'].includes(this.type);
+  }
+
+  applyRate() {
+    const el = this.el;
+    if (!el || !this.supportsRate) return;
+    const r = Math.max(0.0625, Math.min(4, Number(this.settings.rate) || 1));
+    el.defaultPlaybackRate = r;
+    el.playbackRate = r;
+    el.preservesPitch = this.settings.preservePitch !== false;
+  }
+
+  setRate(r) {
+    this.settings.rate = Math.max(0.0625, Math.min(4, Number(r) || 1));
+    this.applyRate();
+    this.changed();
+  }
+
+  toggleSlowMo() {
+    this.setRate(this.settings.rate < 1 ? 1 : this.settings.slowMoRate || 0.5);
+  }
+
   changed() {
     this.version++;
     for (const l of this.listeners) l(this);
@@ -163,6 +191,7 @@ class MediaFileInput extends Input {
     el.loop = this.settings.loop;
     el.addEventListener('seeked', () => this.version++);
     el.addEventListener('loadeddata', () => {
+      this.applyRate();
       this.version++;
       this.changed();
     });
@@ -315,6 +344,7 @@ export class ListInput extends Input {
     this.el.preload = 'auto';
     this.el.playsInline = true;
     this.el.addEventListener('loadeddata', () => {
+      this.applyRate();
       this.version++;
       this.changed();
     });
@@ -747,12 +777,13 @@ export class BrowserInput extends Input {
     this.fps = opts.fps || 25;
     this.css = opts.css || '';
     this.frame = null;
+    this.preload = opts.preload || '';
     if (!opts.title) this.title = this.url.replace(/^https?:\/\//, '').slice(0, 40);
   }
 
   async init() {
     if (imix()?.browserOpen) {
-      await imix().browserOpen({ id: this.id, url: this.url, width: this.width, height: this.height, fps: this.fps, css: this.css });
+      await imix().browserOpen({ id: this.id, url: this.url, width: this.width, height: this.height, fps: this.fps, css: this.css, preload: this.preload });
     } else {
       this.error = 'Web browser inputs require the desktop app';
     }
@@ -786,6 +817,27 @@ export class BrowserInput extends Input {
   destroy() {
     super.destroy();
     imix()?.browserClose(this.id);
+  }
+}
+
+// Unique AV Countdown's presenter timer as a mixer input (rendered offscreen).
+export class CountdownInput extends BrowserInput {
+  constructor(opts = {}) {
+    const transparent = opts.transparent ?? false;
+    super({ ...opts, url: `app://ui/feed.html${transparent ? '?bg=transparent' : ''}`, preload: 'countdown', fps: opts.fps || 25, title: opts.title || 'Countdown' });
+    this.type = 'countdown';
+    this.transparent = transparent;
+  }
+
+  async init() {
+    if (imix()?.browserOpen) await super.init();
+    else this.error = 'The Countdown timer needs the desktop app';
+  }
+
+  serialize() {
+    const d = super.serialize();
+    delete d.url;
+    return { ...d, transparent: this.transparent };
   }
 }
 
@@ -833,6 +885,7 @@ export function createInput(data, ctx = {}) {
     case 'browser': return new BrowserInput(data);
     case 'url': return new UrlInput(data);
     case 'replay': return new ReplayInput(data, ctx.replay);
+    case 'countdown': return new CountdownInput(data);
     default: throw new Error(`Unknown input type ${data.type}`);
   }
 }

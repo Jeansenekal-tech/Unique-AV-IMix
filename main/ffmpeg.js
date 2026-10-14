@@ -92,7 +92,7 @@ function buildStreamArgs(opts) {
   }
   args.push(
     '-b:v', `${vb}k`, '-maxrate', `${vb}k`, '-bufsize', `${vb * 2}k`,
-    '-pix_fmt', 'yuv420p', '-r', String(fps), '-g', String(fps * 2), '-keyint_min', String(fps * 2),
+    '-pix_fmt', 'yuv420p', '-r', String(fps), '-g', String(Math.round(fps * 2)), '-keyint_min', String(Math.round(fps * 2)),
     '-c:a', 'aac', '-b:a', `${ab}k`, '-ar', '48000', '-ac', '2'
   );
   const dests = opts.destinations.filter((d) => d && d.url);
@@ -170,6 +170,105 @@ class Streamer {
   }
 }
 
+// ------------------------------------------------------------------------
+// Device / network outputs: any number of FFmpeg processes, each fed by its
+// own MediaRecorder stream from the mixer.
+//   kind 'decklink' → Blackmagic DeckLink / UltraStudio (needs an FFmpeg built
+//                     with --enable-decklink + Blackmagic Desktop Video)
+//   kind 'url'      → SRT / RTMP(S) / UDP / file
+
+function hasDevice(name) {
+  const bin = findFfmpeg();
+  if (!bin) return false;
+  try {
+    return new RegExp(`\\b${name}\\b`).test(execFileSync(bin, ['-hide_banner', '-devices']).toString());
+  } catch {
+    return false;
+  }
+}
+
+function listDecklink() {
+  const bin = findFfmpeg();
+  if (!bin || !hasDevice('decklink')) return { supported: false, devices: [] };
+  let text = '';
+  try {
+    execFileSync(bin, ['-hide_banner', '-f', 'decklink', '-list_devices', '1', '-i', 'dummy'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (e) {
+    text = String(e.stderr || '') + String(e.stdout || '');
+  }
+  const devices = [...text.matchAll(/'([^']+)'/g)].map((m) => m[1]).filter((n) => !/dummy/i.test(n));
+  return { supported: true, devices: [...new Set(devices)] };
+}
+
+function buildOutputArgs(opts) {
+  if (opts.kind === 'decklink') {
+    const fps = opts.fps || 30;
+    return ['-hide_banner', '-loglevel', 'warning', '-stats', '-fflags', '+genpts+nobuffer', '-flags', 'low_delay', '-i', 'pipe:0',
+      '-map', '0:v:0', '-map', '0:a:0?',
+      '-vf', `scale=${opts.width}:${opts.height}:flags=bicubic,fps=${fps},format=uyvy422`,
+      '-c:v', 'rawvideo', '-c:a', 'pcm_s16le', '-ar', '48000', '-ac', '2',
+      '-f', 'decklink', opts.device];
+  }
+  return buildStreamArgs({ ...opts, destinations: [{ url: opts.url }] }).args;
+}
+
+class DeviceOutputs {
+  constructor(onEvent) {
+    this.onEvent = onEvent;
+    this.procs = new Map();
+  }
+
+  start(id, opts) {
+    this.stop(id);
+    const bin = findFfmpeg();
+    if (!bin) throw new Error('FFmpeg not found');
+    if (opts.kind === 'decklink' && !hasDevice('decklink')) {
+      throw new Error('This FFmpeg build has no DeckLink support. Install Blackmagic Desktop Video and set an FFmpeg built with --enable-decklink in Settings → Streaming.');
+    }
+    if (opts.kind === 'url' && !opts.url) throw new Error('No output URL');
+    const proc = spawn(bin, buildOutputArgs(opts), { stdio: ['pipe', 'ignore', 'pipe'] });
+    this.procs.set(id, proc);
+    proc.stdin.on('error', () => {});
+    proc.stderr.on('data', (d) => {
+      const text = d.toString().trim();
+      if (text && !/^frame=/.test(text)) this.onEvent({ id, type: 'log', message: text });
+    });
+    proc.on('exit', (code) => {
+      if (this.procs.get(id) === proc) this.procs.delete(id);
+      this.onEvent({ id, type: 'stopped', code });
+    });
+    proc.on('error', (err) => this.onEvent({ id, type: 'error', message: err.message }));
+    return { ok: true };
+  }
+
+  write(id, chunk) {
+    const p = this.procs.get(id);
+    if (p && p.stdin.writable) p.stdin.write(Buffer.from(chunk));
+  }
+
+  stop(id) {
+    const p = this.procs.get(id);
+    if (!p) return;
+    this.procs.delete(id);
+    try {
+      p.stdin.end();
+    } catch {
+      /* ignore */
+    }
+    setTimeout(() => {
+      try {
+        p.kill('SIGTERM');
+      } catch {
+        /* ignore */
+      }
+    }, 2000);
+  }
+
+  stopAll() {
+    for (const id of [...this.procs.keys()]) this.stop(id);
+  }
+}
+
 // Remux a finished MediaRecorder file so it has a proper index/duration
 // (MediaRecorder writes fragmented / unseekable files). Best effort.
 function remux(file, targetExt) {
@@ -209,4 +308,4 @@ function remux(file, targetExt) {
   });
 }
 
-module.exports = { findFfmpeg, ffmpegInfo, setCustomPath, Streamer, remux, buildStreamArgs, muxerFor };
+module.exports = { findFfmpeg, ffmpegInfo, setCustomPath, Streamer, remux, buildStreamArgs, muxerFor, DeviceOutputs, listDecklink, buildOutputArgs };

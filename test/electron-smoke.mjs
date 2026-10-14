@@ -6,6 +6,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import net from 'node:net';
 import http from 'node:http';
+import dgram from 'node:dgram';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -193,6 +194,66 @@ const sys = await page.evaluate(async () => {
 });
 check(sys.stats && Number.isFinite(sys.stats.cpu) && Number.isFinite(sys.stats.appCpu) && sys.stats.memoryMB > 0, `system monitor reports CPU/RAM (${JSON.stringify(sys.stats)})`);
 check(/%$/.test(sys.cpu) && sys.gpu && sys.ram, `status bar shows CPU ${sys.cpu} · GPU ${sys.gpu} · RAM ${sys.ram}`);
+
+// ------------------------------------- Unique AV Countdown (integrated)
+const cd = await page.evaluate(async () => {
+  await imixApp.api.call('CountdownReset');
+  const r1 = await imixApp.api.call('CountdownStart');
+  await new Promise((r) => setTimeout(r, 1500));
+  const snap = await window.imix.countdownSnapshot();
+  const inp = await imixApp.mixer.addInput({ type: 'countdown' }, { select: false });
+  await new Promise((r) => setTimeout(r, 3000));
+  await imixApp.api.call('CountdownMessage', { Value: 'Wrap up' });
+  await imixApp.api.call('CountdownAdd', { Value: 60 });
+  await new Promise((r) => setTimeout(r, 400));
+  const snap2 = await window.imix.countdownSnapshot();
+  return {
+    ok: r1.ok, running: snap.running, time: snap.time, title: snap.title, err: inp.error || null,
+    frame: inp.frame ? [inp.frame.width, inp.frame.height] : null, msg: snap2.messageVisible ? snap2.message : '',
+    pill: document.getElementById('cdPill').textContent, inState: !!imixApp.api.stateJson().countdown,
+  };
+});
+check(cd.ok && cd.running, `countdown starts from the mixer API (${cd.time} · ${cd.title})`);
+check(cd.frame && cd.frame[0] > 0 && !cd.err, `Countdown input renders the presenter timer (${JSON.stringify(cd.frame)} ${cd.err || ''})`);
+check(cd.msg === 'Wrap up', 'CountdownMessage shows a presenter message');
+check(/⏱/.test(cd.pill) && cd.inState, `countdown status in top bar (“${cd.pill}”) and API state`);
+let cdState = null;
+for (let i = 0; i < 20 && !cdState; i++) {
+  try {
+    cdState = await (await fetch('http://127.0.0.1:8080/api/state')).json();
+  } catch {
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+check(cdState && cdState.running && Array.isArray(cdState.segments), `countdown phone remote on :8080 (${cdState?.time} running=${cdState?.running})`);
+await new Promise((resolve) => {
+  const sock = dgram.createSocket('udp4');
+  const pad = (b) => Buffer.concat([b, Buffer.alloc(4 - (b.length % 4))]);
+  sock.send(pad(Buffer.from('/timer/pause')), 8000, '127.0.0.1', () => { sock.close(); resolve(); });
+});
+await new Promise((r) => setTimeout(r, 500));
+const afterOsc = await page.evaluate(() => window.imix.countdownSnapshot());
+check(afterOsc.running === false && /OSC/.test(afterOsc.lastRemoteEvent), `countdown OSC on UDP 8000 (${afterOsc.lastRemoteEvent})`);
+const operatorPage = app.windows().find((w) => w.url().startsWith('app://ui/operator.html'));
+const segs = operatorPage ? await operatorPage.evaluate(() => document.querySelectorAll('#segList li').length) : 0;
+check(operatorPage && segs > 0, `countdown operator window loaded (${segs} rundown segments)`);
+
+// ------------------------------------------- device / network outputs
+const devices = await page.evaluate(() => window.imix.outputDevices());
+check(devices && typeof devices.supported === 'boolean', `DeckLink detection (${devices.supported ? devices.devices.join(', ') || 'supported, no cards' : 'not in this FFmpeg build'})`);
+const devOut = path.join(out, 'output-feed.flv');
+await page.evaluate(async (file) => {
+  const vo = imixApp.videoOutputs;
+  const o = vo.add({ name: 'Network test', source: 'clean', target: 'stream', url: file, bitrate: 1500 });
+  await vo.open(o.id);
+  await new Promise((r) => setTimeout(r, 4000));
+  vo.remove(o.id);
+  await new Promise((r) => setTimeout(r, 2500));
+}, devOut);
+if (fs.existsSync(devOut)) {
+  const probe = execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_name,width,height', '-of', 'compact=p=0', devOut]).toString();
+  check(/codec_name=h264/.test(probe), `clean feed → FFmpeg network output (${probe.trim().replace(/\n/g, ' | ')})`);
+} else check(false, 'network output file written');
 
 // --------------------------------------------------------------- ffmpeg info
 const ff = await page.evaluate(() => window.imix.ffmpegInfo());

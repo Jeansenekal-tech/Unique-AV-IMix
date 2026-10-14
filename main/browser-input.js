@@ -1,6 +1,9 @@
 // Browser (web page) inputs, rendered offscreen and streamed as raw BGRA
 // frames to the mixer window over IPC.
 const { BrowserWindow } = require('electron');
+const path = require('path');
+
+const PRELOADS = { countdown: path.join(__dirname, '..', 'countdown', 'feed-preload.js') };
 
 class BrowserInputs {
   constructor(getTarget) {
@@ -8,7 +11,7 @@ class BrowserInputs {
     this.windows = new Map();
   }
 
-  open({ id, url, width = 1280, height = 720, fps = 25, transparent = true, css = '' }) {
+  open({ id, url, width = 1280, height = 720, fps = 25, transparent = true, css = '', preload = '' }) {
     this.close(id);
     const win = new BrowserWindow({
       show: false,
@@ -16,7 +19,7 @@ class BrowserInputs {
       height,
       transparent,
       frame: false,
-      webPreferences: { offscreen: true, backgroundThrottling: false, sandbox: true },
+      webPreferences: { offscreen: true, backgroundThrottling: false, sandbox: true, preload: PRELOADS[preload] || undefined },
     });
     win.webContents.setAudioMuted(true);
     win.webContents.setFrameRate(Math.max(1, Math.min(60, fps)));

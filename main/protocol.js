@@ -9,6 +9,8 @@ const path = require('path');
 
 const SCHEME = 'imix';
 const SRC_ROOT = path.join(__dirname, '..', 'src');
+// Unique AV Countdown's pages keep their original app://ui/… addresses.
+const COUNTDOWN_UI = path.join(__dirname, '..', 'countdown', 'renderer');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -52,6 +54,7 @@ function registerSchemePrivileges() {
         stream: true,
       },
     },
+    { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
   ]);
 }
 
@@ -122,6 +125,13 @@ function handleProtocol() {
       return fileResponse(path.resolve(file), request);
     }
     return new Response('Not found', { status: 404 });
+  });
+  protocol.handle('app', (request) => {
+    const url = new URL(request.url);
+    let rel = decodeURIComponent(url.pathname).replace(/^\/+/, '') || 'operator.html';
+    const file = path.normalize(path.join(COUNTDOWN_UI, rel));
+    if (!file.startsWith(COUNTDOWN_UI)) return new Response('Forbidden', { status: 403 });
+    return fileResponse(file, request);
   });
 }
 

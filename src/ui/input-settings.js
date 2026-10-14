@@ -21,6 +21,11 @@ export function openInputSettings(app, input) {
         h('label', null, 'Auto Pause'), check(st.autoPause, (v) => { st.autoPause = v; }),
         h('label', null, 'Auto Restart'), check(st.autoRestart, (v) => { st.autoRestart = v; }),
         h('div', { class: 'full help' }, 'Auto Play starts the input when it goes to Output or an overlay; Auto Pause pauses it when it leaves.'),
+        h('h4', null, 'Speed / slow motion'),
+        ...slider('Playback speed', st.rate || 1, { min: 0.1, max: 2, step: 0.05, fmt: (v) => `${Number(v).toFixed(2)}×`, onInput: (v) => input.setRate(v) }),
+        ...slider('Slow-mo button speed', st.slowMoRate || 0.5, { min: 0.1, max: 0.9, step: 0.05, fmt: (v) => `${Number(v).toFixed(2)}×`, onInput: (v) => { st.slowMoRate = v; } }),
+        h('label', null, 'Keep audio pitch'), check(st.preservePitch !== false, (v) => { st.preservePitch = v; input.applyRate(); }),
+        h('div', { class: 'full help' }, 'For live cameras use Instant Replay (⏪) – it records the source and plays it back in slow motion.'),
       );
     }
     if (input.type === 'video' || input.type === 'audiofile') {

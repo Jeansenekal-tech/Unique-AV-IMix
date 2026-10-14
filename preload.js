@@ -34,6 +34,11 @@ contextBridge.exposeInMainWorld('imix', {
   onStreamEvent: on('stream-event'),
 
   ffmpegInfo: () => ipcRenderer.invoke('ffmpeg:info'),
+  outputDevices: () => ipcRenderer.invoke('output:devices'),
+  outputStart: (id, opts) => ipcRenderer.invoke('output:start', id, opts),
+  outputChunk: (id, data) => ipcRenderer.send('output:chunk', id, data),
+  outputStop: (id) => ipcRenderer.invoke('output:stop', id),
+  onOutputEvent: on('output-event'),
   ffmpegSetPath: (p) => ipcRenderer.invoke('ffmpeg:setPath', p),
 
   displays: () => ipcRenderer.invoke('displays:list'),
@@ -67,6 +72,13 @@ contextBridge.exposeInMainWorld('imix', {
   updateDownload: () => ipcRenderer.invoke('update:download'),
   updateInstall: (opts) => ipcRenderer.invoke('update:install', opts),
   onUpdateStatus: on('update-status'),
+
+  countdownOpen: () => ipcRenderer.invoke('cd:open'),
+  countdownCmd: (c, v) => ipcRenderer.invoke('cd:mixer-cmd', c, v ?? null),
+  countdownSnapshot: () => ipcRenderer.invoke('cd:snapshot'),
+  countdownConfig: () => ipcRenderer.invoke('cd:config:get'),
+  countdownPresenter: () => ipcRenderer.invoke('cd:presenter:toggle'),
+  onCountdownTick: on('cd:tick'),
 
   onMenu: on('menu'),
   onLog: on('log'),
