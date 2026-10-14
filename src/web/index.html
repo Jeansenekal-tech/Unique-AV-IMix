@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Unique AV Streaming GuRu Remote</title>
+  <style>
+    :root { --bg:#121418; --bg2:#1c1f26; --bg3:#272b34; --text:#e6e8ec; --text2:#9aa3b2; --accent:#7c5cff; --pgm:#e5484d; --pvw:#30a46c; color-scheme: dark; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif; padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); }
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    h1 { font-size: 17px; margin: 0; } h1 span { color: var(--accent); }
+    .status { display: flex; gap: 6px; font: 600 12px Menlo, monospace; }
+    .pill { padding: 3px 8px; border-radius: 99px; background: var(--bg3); color: var(--text2); }
+    .pill.on { background: var(--pgm); color: #fff; }
+    .snap { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; border: 2px solid var(--pgm); object-fit: contain; display: block; margin-bottom: 12px; }
+    .row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+    button { background: var(--bg3); color: var(--text); border: 1px solid #383e4a; border-radius: 8px; padding: 14px 6px; font: 600 14px inherit; font-family: inherit; cursor: pointer; }
+    button:active { transform: scale(.97); }
+    button.cut { background: #3a3f4b; }
+    button.trans { background: var(--accent); border-color: var(--accent); }
+    button.on { background: var(--pgm); border-color: var(--pgm); color: #fff; }
+    h2 { font-size: 12px; letter-spacing: 1px; color: var(--text2); margin: 16px 0 8px; }
+    .inputs { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+    .inp { text-align: left; padding: 10px; border: 3px solid transparent; background: var(--bg2); }
+    .inp.pgm { border-color: var(--pgm); } .inp.pvw { border-color: var(--pvw); }
+    .inp small { display: block; color: var(--text2); font-weight: 400; margin-top: 3px; }
+    .inp .acts { display: flex; gap: 4px; margin-top: 8px; }
+    .inp .acts button { padding: 6px; flex: 1; font-size: 12px; }
+    .ov { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .vol { display: flex; align-items: center; gap: 10px; margin: 6px 0; background: var(--bg2); padding: 8px 10px; border-radius: 8px; }
+    .vol span { flex: 0 0 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vol input { flex: 1; accent-color: var(--accent); }
+    .vol button { padding: 6px 10px; }
+    .fields input { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #383e4a; background: var(--bg); color: var(--text); font-size: 15px; margin-bottom: 6px; }
+    select { width: 100%; padding: 10px; border-radius: 6px; background: var(--bg2); color: var(--text); border: 1px solid #383e4a; font-size: 15px; margin-bottom: 8px; }
+    .err { color: var(--pgm); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Unique AV <span>Streaming GuRu</span> Remote</h1>
+    <div class="status"><span class="pill" id="rec">REC</span><span class="pill" id="str">LIVE</span></div>
+  </header>
+  <img id="snap" class="snap" alt="Output">
+  <div class="row">
+    <button class="cut" onclick="fn('Cut')">CUT</button>
+    <button class="trans" onclick="fn('Transition1')" id="t1">Fade</button>
+    <button onclick="fn('Transition2')" id="t2">T2</button>
+    <button onclick="fn('FadeToBlack')" id="ftb">FTB</button>
+  </div>
+  <h2>OVERLAYS (with preview input)</h2>
+  <div class="ov">
+    <button onclick="fn('PreviewOverlayInput1')" id="ov1">1</button>
+    <button onclick="fn('PreviewOverlayInput2')" id="ov2">2</button>
+    <button onclick="fn('PreviewOverlayInput3')" id="ov3">3</button>
+    <button onclick="fn('PreviewOverlayInput4')" id="ov4">4</button>
+  </div>
+  <h2>INPUTS — tap to preview</h2>
+  <div class="inputs" id="inputs"></div>
+  <h2>TITLES</h2>
+  <div class="fields" id="titles"></div>
+  <h2>AUDIO</h2>
+  <div id="audio"></div>
+  <h2>OUTPUTS</h2>
+  <div class="row">
+    <button onclick="fn('StartStopRecording')" id="recBtn">Record</button>
+    <button onclick="fn('StartStopStreaming')" id="strBtn">Stream</button>
+    <button onclick="fn('Snapshot')">Snapshot</button>
+    <button onclick="fn('ReplayPlayLast')">Replay</button>
+  </div>
+  <div class="err" id="err"></div>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let state = null, editingTitle = null;
+    async function fn(name, params = {}) {
+      const q = new URLSearchParams({ Function: name, ...params });
+      const r = await fetch('/api?' + q);
+      if (!r.ok) $('err').textContent = await r.text(); else $('err').textContent = '';
+      poll();
+    }
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    function render() {
+      const s = state;
+      $('rec').classList.toggle('on', s.recording); $('str').classList.toggle('on', s.streaming);
+      $('recBtn').classList.toggle('on', s.recording); $('strBtn').classList.toggle('on', s.streaming);
+      $('ftb').classList.toggle('on', s.fadeToBlack);
+      $('t1').textContent = s.transitions[0].effect; $('t2').textContent = s.transitions[1].effect;
+      s.overlays.forEach((o, i) => $('ov' + (i + 1)).classList.toggle('on', o.active));
+      $('inputs').innerHTML = s.inputs.map((i) => `
+        <div class="inp ${i.onAir ? 'pgm' : i.number === s.preview ? 'pvw' : ''}" onclick="fn('PreviewInput',{Input:${i.number}})">
+          <b>${i.number}. ${esc(i.title)}</b><small>${esc(i.type)}${i.state !== 'Running' && i.duration ? ' · ' + i.state : ''}</small>
+          <div class="acts"><button onclick="event.stopPropagation();fn('Cut',{Input:${i.number}})">Cut</button>
+          <button onclick="event.stopPropagation();fn('Fade',{Input:${i.number}})">Fade</button></div>
+        </div>`).join('');
+      $('audio').innerHTML = s.inputs.filter((i) => i.hasAudio).map((i) => `
+        <div class="vol"><span>${i.number}. ${esc(i.title)}</span>
+          <input type="range" min="0" max="100" value="${i.volume}" onchange="fn('SetVolume',{Input:${i.number},Value:this.value})">
+          <button class="${i.muted ? 'on' : ''}" onclick="fn('Audio',{Input:${i.number}})">M</button></div>`).join('')
+        + `<div class="vol"><span><b>Master</b></span><input type="range" min="0" max="100" value="${s.master.volume}" onchange="fn('SetMasterVolume',{Value:this.value})">
+          <button class="${s.master.muted ? 'on' : ''}" onclick="fn('MasterAudio')">M</button></div>`;
+      const titles = s.inputs.filter((i) => i.fields);
+      if (!document.activeElement || document.activeElement.tagName !== 'INPUT' || !$('titles').contains(document.activeElement)) {
+        if (!titles.length) { $('titles').innerHTML = '<small style="color:var(--text2)">No title inputs</small>'; return; }
+        if (!editingTitle || !titles.find((t) => t.number === editingTitle)) editingTitle = titles[0].number;
+        const t = titles.find((x) => x.number === editingTitle);
+        $('titles').innerHTML = `<select onchange="editingTitle=+this.value;render()">${titles.map((x) => `<option value="${x.number}" ${x.number === editingTitle ? 'selected' : ''}>${x.number}. ${esc(x.title)}</option>`).join('')}</select>`
+          + Object.entries(t.fields).map(([k, v]) => `<input placeholder="${esc(k)}" value="${esc(v)}" onchange="fn('SetText',{Input:${t.number},SelectedName:'${esc(k)}',Value:this.value})">`).join('');
+      }
+    }
+    async function poll() {
+      try {
+        const r = await fetch('/api/state.json');
+        state = await r.json();
+        render();
+      } catch (e) { $('err').textContent = 'Disconnected'; }
+    }
+    setInterval(poll, 700); poll();
+    setInterval(() => { $('snap').src = '/api/snapshot.jpg?t=' + Date.now(); }, 1000);
+  </script>
+</body>
+</html>

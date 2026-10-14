@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Countdown feed</title>
+<link rel="stylesheet" href="presenter.css">
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #root { position: fixed; inset: 0; }
+  /* ?bg=transparent → key-free overlay in the mixer */
+  body.transparent, body.transparent #root, body.transparent .pv, body.transparent .tp:not(.flash), body.transparent .tb:not(.flash) { background: transparent !important; }
+  body.transparent .tp-digits, body.transparent .tb-digits, body.transparent .tp-title, body.transparent .tp-clock { text-shadow: 0 2px 12px rgba(0,0,0,.85); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="presenter-render.js"></script>
+<script>
+  // Renders the presenter timer for Unique AV Streaming GuRu's "Countdown" input.
+  // Video PIP layouts belong to the presenter screen; in the mixer, use layers.
+  (async () => {
+    const q = new URLSearchParams(location.search);
+    if (q.get('bg') === 'transparent') document.body.classList.add('transparent');
+    const render = new PresenterRender(document.getElementById('root'));
+    let cfg = await window.uavFeed.getConfig();
+    let snap = null;
+    window.uavFeed.on('config', (c) => { cfg = c; });
+    window.uavFeed.on('tick', (s) => { snap = s; render.update(snap, cfg, { active: false, hasSignal: false, name: '' }); });
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+name: Build macOS app
+
+on:
+  push:
+    branches: [main, master, 'claude/**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg xvfb
+      - run: npm ci
+      - run: npm i --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - run: node test/unit-updater.mjs
+      - run: node test/unit-sysmon.mjs
+      - run: node test/countdown-engine-test.cjs
+      - run: node test/browser-smoke.mjs
+      - run: xvfb-run -a node test/electron-smoke.mjs
+
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15        # Apple Silicon
+            arch: arm64
+          - os: macos-15-intel  # Intel
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: GPU monitor reading on this Mac (informational)
+        run: node -e "require('./main/sysmon').readGpu().then((g) => console.log('GPU:', JSON.stringify(g)))"
+      - name: Use the tag as the app version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"
+      - name: Build .dmg + .zip
+        env:
+          MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Sign + notarise only when the certificate secrets exist; otherwise
+          # build unsigned (scripts/adhoc-sign.cjs ad-hoc signs the app).
+          if [ -n "$MAC_CERT_P12_BASE64" ]; then
+            export CSC_LINK="$MAC_CERT_P12_BASE64" CSC_KEY_PASSWORD="$MAC_CERT_PASSWORD"
+          else
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+          fi
+          npx electron-builder --mac --${{ matrix.arch }} --publish never
+      - name: Verify code signature
+        run: |
+          APP=$(ls -d dist/mac*/*.app | head -1)
+          codesign --verify --deep "$APP" && echo "signature OK"
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Unique-AV-Streaming-GuRu-mac-${{ matrix.arch }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
+
+  # Tag a version (git tag v1.0.1 && git push --tags) to publish a GitHub
+  # Release with update-mac.json – installed apps pick it up automatically.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release notes
+        run: git log -1 --pretty=%B > notes.txt
+      - run: node scripts/make-update-manifest.mjs dist "${GITHUB_REF_NAME}" notes.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.dmg
+            dist/*.zip
+            dist/update-mac.json
+          body_path: notes.txt

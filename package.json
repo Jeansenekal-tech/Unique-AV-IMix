@@ -1,0 +1,72 @@
+{
+  "name": "unique-av-streaming-guru",
+  "productName": "Unique AV Streaming GuRu",
+  "version": "1.0.0",
+  "description": "Unique AV Streaming GuRu \u2013 live video production switcher for macOS (inputs, transitions, overlays, titles, audio mixer, recording, streaming, replay, web/TCP API).",
+  "main": "main.js",
+  "author": "Unique AV",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "dist:mac": "electron-builder --mac",
+    "dist:mac:arm64": "electron-builder --mac --arm64",
+    "dist:mac:x64": "electron-builder --mac --x64",
+    "test": "node test/unit-updater.mjs && node test/unit-sysmon.mjs && node test/countdown-engine-test.cjs && node test/browser-smoke.mjs",
+    "test:electron": "xvfb-run -a node test/electron-smoke.mjs",
+    "manifest": "node scripts/make-update-manifest.mjs dist"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "optionalDependencies": {
+    "ffmpeg-static": "^5.2.0"
+  },
+  "build": {
+    "appId": "com.uniqueav.streamingguru",
+    "productName": "Unique AV Streaming GuRu",
+    "copyright": "Copyright \u00a9 Unique AV",
+    "files": [
+      "main.js",
+      "preload.js",
+      "main/**/*",
+      "src/**/*",
+      "package.json",
+      "build/icon.png",
+      "countdown/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**"
+    ],
+    "mac": {
+      "category": "public.app-category.video",
+      "icon": "build/icon.png",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSCameraUsageDescription": "Unique AV Streaming GuRu uses your cameras as live video inputs.",
+        "NSMicrophoneUsageDescription": "Unique AV Streaming GuRu uses your microphones and audio interfaces as live audio inputs.",
+        "NSScreenCaptureUsageDescription": "Unique AV Streaming GuRu can capture your screen or windows as a live input."
+      },
+      "artifactName": "Unique-AV-Streaming-GuRu-${version}-${arch}.${ext}"
+    },
+    "dmg": {
+      "title": "Unique AV Streaming GuRu",
+      "artifactName": "Unique-AV-Streaming-GuRu-${version}-${arch}.${ext}"
+    },
+    "afterSign": "scripts/adhoc-sign.cjs"
+  },
+  "updateUrl": "https://github.com/Jeansenekal-tech/Unique-AV-IMix/releases/latest/download",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jeansenekal-tech/Unique-AV-IMix.git"
+  }
+}

@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Unique AV Streaming GuRu – Output</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
+    video { width: 100%; height: 100%; object-fit: contain; display: block; }
+  </style>
+</head>
+<body>
+  <video id="out" autoplay muted playsinline></video>
+  <script>
+    // Double-click toggles full screen when the output runs in a window.
+    document.addEventListener('dblclick', () => {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen().catch(() => {});
+    });
+  </script>
+</body>
+</html>

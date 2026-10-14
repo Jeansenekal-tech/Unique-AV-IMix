@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' imix: blob: data:; script-src 'self' imix: blob: 'unsafe-eval'; worker-src blob: 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob: imix:; media-src * blob: data: imix:; connect-src *;">
+  <title>Unique AV Streaming GuRu</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <div class="brand"><span class="logo">◆</span> Unique AV <b>Streaming GuRu</b></div>
+      <div class="topbar-center">
+        <span id="formatLabel" class="pill subtle">1080p30</span>
+        <span id="fpsLabel" class="pill subtle">-- fps</span>
+        <span id="recPill" class="pill rec hidden">● REC <span id="recTime">00:00:00</span></span>
+        <span id="streamPill" class="pill stream hidden">● LIVE <span id="streamTime">00:00:00</span> <span id="streamRate"></span></span>
+        <span id="extPill" class="pill ext hidden">EXT</span>
+        <span id="ftbPill" class="pill ftb hidden">FTB</span>
+        <span id="cdPill" class="pill countdown hidden" title="Countdown – click to open the operator"></span>
+        <span id="updatePill" class="pill update hidden" title="Software update"></span>
+      </div>
+      <div class="topbar-right">
+        <span id="clock" class="clock">00:00:00</span>
+      </div>
+    </header>
+
+    <section id="monitors">
+      <div class="monitor" id="previewMon">
+        <div class="mon-head"><span class="tag preview">PREVIEW</span><span class="mon-name" id="pvName">—</span></div>
+        <div class="mon-screen"><canvas id="previewCanvas" width="960" height="540"></canvas></div>
+        <div class="transport" id="pvTransport"></div>
+      </div>
+
+      <div id="transitions"></div>
+
+      <div class="monitor" id="programMon">
+        <div class="mon-head"><span class="tag program">OUTPUT</span><span class="mon-name" id="pgName">—</span></div>
+        <div class="mon-screen"><canvas id="programCanvas" width="1920" height="1080"></canvas></div>
+        <div class="transport" id="pgTransport"></div>
+      </div>
+    </section>
+
+    <section id="lower">
+      <div id="inputsPane">
+        <div class="pane-head">
+          <span class="pane-title">INPUTS</span>
+          <div class="pane-tools">
+            <button class="btn small" id="addInputBtn">＋ Add Input</button>
+            <label class="tool-label">Size <input type="range" id="tileSize" min="140" max="320" value="200"></label>
+          </div>
+        </div>
+        <div id="inputGrid" class="input-grid"></div>
+        <div id="dropHint" class="drop-hint hidden">Drop media files to add inputs</div>
+      </div>
+      <div id="audioPane">
+        <div class="pane-head">
+          <span class="pane-title">AUDIO MIXER</span>
+          <div class="pane-tools">
+            <button class="btn small toggle" id="monitorBtn" title="Play the master mix on this Mac's speakers">🎧 Monitor</button>
+          </div>
+        </div>
+        <div id="mixerStrips" class="mixer-strips"></div>
+      </div>
+    </section>
+
+    <footer id="bottombar">
+      <div class="bb-group">
+        <button class="btn" id="bbAdd">＋ Add Input</button>
+      </div>
+      <div class="bb-group">
+        <button class="btn out" id="bbRecord"><span class="dot"></span> Record</button>
+        <button class="btn out" id="bbStream"><span class="dot"></span> Stream</button>
+        <button class="btn out" id="bbExternal" title="Video & audio outputs – screens, windows, Blackmagic cards, SRT, audio devices">🖥 Outputs</button>
+        <button class="btn out" id="bbMultiview">Multiview</button>
+        <button class="btn out" id="bbSnapshot" title="Save a PNG of the output">Snapshot</button>
+      </div>
+      <div class="bb-group" id="overlayStatus"></div>
+      <div class="bb-group right">
+        <button class="btn" id="bbCountdown" title="Unique AV Countdown operator (⇧⌘T)">⏱ Countdown</button>
+        <button class="btn" id="bbReplay">⏪ Replay</button>
+        <button class="btn" id="bbTools">Tools ▾</button>
+        <button class="btn" id="bbProject">Project ▾</button>
+        <button class="btn" id="bbSettings">⚙ Settings</button>
+      </div>
+    </footer>
+    <div id="statusbar">
+      <span id="statusLeft" class="status-left"></span>
+      <div id="sysStats" class="sys-stats">
+        <span class="stat" id="statCpu"><b>CPU</b><span class="meter"><i></i></span><span class="v">–</span></span>
+        <span class="stat" id="statGpu"><b>GPU</b><span class="meter"><i></i></span><span class="v">–</span></span>
+        <span class="stat" id="statMem"><b>RAM</b><span class="v">–</span></span>
+        <span class="stat" id="statRender"><b>RENDER</b><span class="meter"><i></i></span><span class="v">–</span></span>
+        <span id="apiStatus" class="api-status" title="Web controller / API">API</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
