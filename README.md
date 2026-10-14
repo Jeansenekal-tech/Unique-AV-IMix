@@ -138,18 +138,14 @@ Every push runs `.github/workflows/build-mac.yml`. It runs the tests and then bu
 
 ### Publishing a release (and auto-updates)
 
-```sh
-git tag v1.0.1 && git push origin v1.0.1
-```
+On GitHub, go to **Actions → Build macOS app → Run workflow**. Type the new version (for example `1.0.1`) and, optionally, what's new, then click **Run workflow**. In about 5 minutes it:
+1. Builds the Apple Silicon and Intel DMGs.
+2. Sets the app version.
+3. Publishes a GitHub Release with the `.dmg` and `.zip` files and an `update-mac.json` manifest.
 
-Pushing a `v*` tag makes the workflow build both DMGs, set the app version from the tag, and publish a GitHub Release. The release includes the `.dmg` and `.zip` files and an `update-mac.json` manifest. Installed copies find the release through `updateUrl` in `package.json`, which by default points to this repository's latest release.
+Installed copies find the new version within 4 hours, or straight away with *Check for Updates…*. Pushing a `v*` git tag does the same thing.
 
-> **The repository is private.** An installed app can't download from a private repository's releases. Choose one of these so auto-update can reach users:
-> * make this repository public, or
-> * publish releases to a separate **public** repository and point `updateUrl` in `package.json` to `https://github.com/<owner>/<public-repo>/releases/latest/download`, or
-> * upload the release files (`update-mac.json`, `.zip`, `.dmg`) to any web server or S3 bucket and set `updateUrl` to that folder.
->
-> You can also change the URL per machine in *Settings → Updates*.
+The app looks for updates through `updateUrl` in `package.json`, which by default points to this repository's latest release. You can change it per machine in *Settings → Updates*.
 
 ### Tests
 ```sh
