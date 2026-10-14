@@ -124,6 +124,9 @@ export class Mixer {
     const s = String(ref);
     const byId = this.inputs.find((i) => i.id === s);
     if (byId) return byId;
+    // Control-surface conventions: 0 = the preview input, -1 = the program input
+    if (s === '0') return this.inputs.find((i) => i.id === this.previewId) || null;
+    if (s === '-1') return this.inputs.find((i) => i.id === this.programId) || null;
     if (/^\d+$/.test(s)) return this.inputs[Number(s) - 1] || null;
     const lower = s.toLowerCase();
     return this.inputs.find((i) => i.title.toLowerCase() === lower) || null;

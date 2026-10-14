@@ -76,18 +76,23 @@
         <button class="btn out" id="bbSnapshot" title="Save a PNG of the output">Snapshot</button>
       </div>
       <div class="bb-group" id="overlayStatus"></div>
-      <div class="bb-group">
+      <div class="bb-group right">
         <button class="btn" id="bbReplay">⏪ Replay</button>
-        <button class="btn" id="bbScripts">Scripts</button>
-        <button class="btn" id="bbShortcuts">Shortcuts</button>
-        <button class="btn" id="bbLog">Log</button>
+        <button class="btn" id="bbTools">Tools ▾</button>
         <button class="btn" id="bbProject">Project ▾</button>
         <button class="btn" id="bbSettings">⚙ Settings</button>
       </div>
-      <div class="bb-group right">
+    </footer>
+    <div id="statusbar">
+      <span id="statusLeft" class="status-left"></span>
+      <div id="sysStats" class="sys-stats">
+        <span class="stat" id="statCpu"><b>CPU</b><span class="meter"><i></i></span><span class="v">–</span></span>
+        <span class="stat" id="statGpu"><b>GPU</b><span class="meter"><i></i></span><span class="v">–</span></span>
+        <span class="stat" id="statMem"><b>RAM</b><span class="v">–</span></span>
+        <span class="stat" id="statRender"><b>RENDER</b><span class="meter"><i></i></span><span class="v">–</span></span>
         <span id="apiStatus" class="api-status" title="Web controller / API">API</span>
       </div>
-    </footer>
+    </div>
   </div>
 
   <div id="toasts"></div>

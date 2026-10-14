@@ -24,6 +24,7 @@ jobs:
       - run: npm i --no-save playwright
       - run: npx playwright install --with-deps chromium
       - run: node test/unit-updater.mjs
+      - run: node test/unit-sysmon.mjs
       - run: node test/browser-smoke.mjs
       - run: xvfb-run -a node test/electron-smoke.mjs
 
@@ -44,6 +45,8 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+      - name: GPU monitor reading on this Mac (informational)
+        run: node -e "require('./main/sysmon').readGpu().then((g) => console.log('GPU:', JSON.stringify(g)))"
       - name: Use the tag as the app version
         if: startsWith(github.ref, 'refs/tags/v')
         run: npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"

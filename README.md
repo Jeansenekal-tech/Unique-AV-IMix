@@ -58,9 +58,16 @@ Add inputs from the **＋ Add Input** button or the **Input** menu, or drop file
 * **MIDI control.** Learn mode supports notes and CCs, and CCs can drive faders and the T-bar.
 * **Scripting** in JavaScript, for example `await API.Function('Fade', {Input: 2})`, plus `sleep()` and `log()`.
 * **HTTP API** on port 8088, for example `GET /api?Function=Cut&Input=2`. It also serves XML state at `/api`, JSON at `/api/state.json` and a live snapshot at `/api/snapshot.jpg`.
-* **TCP API** on port 8099: `FUNCTION`, `XML`, `TALLY` and `SUBSCRIBE TALLY`.
+* **TCP API** on port 8099: `FUNCTION`, `XML`, `TALLY`, `SUBSCRIBE TALLY`, `SUBSCRIBE ACTS` (real-time activators) and `PING`.
 * The API uses the function names and XML layout that common switcher control surfaces expect, so tools such as Bitfocus Companion and Stream Deck can drive it.
 * **Web controller:** open `http://<mac-ip>:8088/` on a phone or tablet. You can switch inputs, run overlays, edit titles, mix audio and start or stop the recording and stream. LAN access and a password are configured in *Settings → Web & API*.
+
+### Status bar
+* **CPU** shows whole-system usage and, on hover, how much of it this app uses.
+* **GPU** shows GPU utilisation from macOS's own graphics statistics; on hover it shows the GPU model and GPU memory in use. It works on Apple Silicon, Intel and AMD GPUs and needs no admin rights.
+* **RAM** shows this app's memory use.
+* **RENDER** shows the frame rate actually achieved against the target, and how much of each frame's time budget is used.
+* Each meter turns amber above 60% and red above 85%.
 
 ### Automatic updates
 * The app checks for new versions in the background every 4 hours and downloads them quietly. It **never restarts during a show**: a green *Restart to update* pill appears in the top bar, and if you ignore it the update installs the next time you quit.
@@ -112,6 +119,7 @@ Pushing a `v*` tag makes the workflow build both DMGs, set the app version from 
 ### Tests
 ```sh
 node test/unit-updater.mjs                  # updater version logic + release manifest
+node test/unit-sysmon.mjs                   # GPU utilisation parsing
 node test/browser-smoke.mjs                 # UI + engine in headless Chromium (needs playwright + ffmpeg)
 xvfb-run -a node test/electron-smoke.mjs    # full app: HTTP/TCP API, recording, FFmpeg streaming, browser input
 ```
@@ -131,6 +139,26 @@ xvfb-run -a node test/electron-smoke.mjs    # full app: HTTP/TCP API, recording,
 | ⌘S / ⌘O | Save / Open project |
 
 Click a tile to put it in Preview. Double-click a tile to open its settings, and right-click it for more actions.
+
+## Bitfocus Companion and Stream Deck
+
+The app speaks the same HTTP (8088) and TCP (8099) control protocol as vMix, so the **Companion vMix module** ("Studiocoast vMix") works with it. That includes Companion driving an Elgato Stream Deck, Stream Deck +, XL or Mini, or Companion's web buttons.
+
+1. In *Settings → Web & API*, make sure the API is enabled. If Companion runs on a **different computer**, turn on **Allow network (LAN) access**.
+2. In Companion, add the **vMix** connection. Set the host to this Mac's IP address, or `127.0.0.1` if Companion runs on the same Mac, and leave the TCP port at 8099.
+3. Use the vMix actions and feedbacks as usual.
+
+Tested against the module's own XML parser and TCP protocol:
+* Program and preview tally, including tally for layered inputs.
+* Overlay, record, stream, fade-to-black and external-output feedbacks.
+* Input volume, mute, audio-follows-video, solo and bus routing.
+* Master, Bus A and Bus B audio with level meters.
+* Title text fields and `SetText`.
+* Real-time activators (`SUBSCRIBE ACTS`), `PING`, and `Input=0` meaning the preview input.
+
+Companion actions for features this app doesn't have do nothing and return an error: PTZ, MultiCorder, video calls, multi-camera replay, data sources, NDI/OMT and Mix 2–16. The full list of supported functions is under *Help → API Reference*.
+
+**Stream Deck without Companion:** Stream Deck plugins built for vMix that send HTTP commands (`/api/?Function=…`) to port 8088 also work. Point them at this Mac's address.
 
 ## API quick reference
 
@@ -154,6 +182,7 @@ main/protocol.js        imix:// scheme – serves the UI and local media (with R
 main/ffmpeg.js          FFmpeg discovery, live streaming (tee muxer → RTMP/SRT), remux
 main/api-server.js      HTTP + TCP control API and web controller
 main/browser-input.js   Offscreen Chromium pages for web browser inputs
+main/sysmon.js          CPU / GPU / RAM monitor for the status bar
 main/updater.js         Auto-update (manifest check, verified download, bundle swap)
 scripts/                Release manifest generator, ad-hoc signing hook
 preload.js              window.imix bridge

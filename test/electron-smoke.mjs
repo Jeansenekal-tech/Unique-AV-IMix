@@ -96,7 +96,7 @@ const tcp = await new Promise((resolve, reject) => {
     buf += d;
   });
   sock.on('connect', () => {
-    sock.write('SUBSCRIBE TALLY\r\nFUNCTION PreviewInput Input=2\r\nTALLY\r\nXML\r\n');
+    sock.write('PING\r\nSUBSCRIBE ACTS\r\nSUBSCRIBE TALLY\r\nFUNCTION PreviewInput Input=2\r\nFUNCTION Cut\r\nTALLY\r\nXML\r\n');
     const start = Date.now();
     const wait = setInterval(() => {
       if (/<\/vmix>/.test(buf) || Date.now() - start > 15000) {
@@ -108,6 +108,9 @@ const tcp = await new Promise((resolve, reject) => {
   });
   sock.on('error', reject);
 });
+check(tcp.startsWith('VERSION OK'), 'TCP greeting (VERSION OK)');
+check(tcp.includes('PING OK PONG'), 'TCP PING');
+check(tcp.includes('SUBSCRIBE OK ACTS') && /ACTS OK Input 2 1/.test(tcp), 'TCP SUBSCRIBE ACTS pushes activator changes');
 check(tcp.includes('SUBSCRIBE OK TALLY'), 'TCP SUBSCRIBE TALLY');
 check(tcp.includes('FUNCTION OK Completed'), 'TCP FUNCTION');
 check(/TALLY OK [012]+/.test(tcp), 'TCP TALLY');
@@ -176,6 +179,20 @@ const ext = await page.evaluate(async () => {
   return ok;
 });
 check(ext, 'external output window receives the program stream');
+
+// ---------------------------------------------------- control-surface API
+res = await fetch(`${base}/api/?Function=Play&Input=0`);
+check(res.ok, 'HTTP /api/ with Input=0 (preview input)');
+const xml2 = await (await fetch(`${base}/api`)).text();
+check(/<master [^>]*meterF1="/.test(xml2) && /<busA /.test(xml2), 'XML has audio meters and buses');
+
+// ------------------------------------------------------ CPU / GPU monitor
+const sys = await page.evaluate(async () => {
+  for (let i = 0; i < 30 && !imixApp.system; i++) await new Promise((r) => setTimeout(r, 200));
+  return { stats: imixApp.system, cpu: document.querySelector('#statCpu .v').textContent, gpu: document.querySelector('#statGpu .v').textContent, ram: document.querySelector('#statMem .v').textContent };
+});
+check(sys.stats && Number.isFinite(sys.stats.cpu) && Number.isFinite(sys.stats.appCpu) && sys.stats.memoryMB > 0, `system monitor reports CPU/RAM (${JSON.stringify(sys.stats)})`);
+check(/%$/.test(sys.cpu) && sys.gpu && sys.ram, `status bar shows CPU ${sys.cpu} · GPU ${sys.gpu} · RAM ${sys.ram}`);
 
 // --------------------------------------------------------------- ffmpeg info
 const ff = await page.evaluate(() => window.imix.ffmpegInfo());

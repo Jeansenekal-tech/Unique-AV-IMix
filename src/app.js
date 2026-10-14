@@ -142,6 +142,54 @@ function initTopbar() {
   }, 250);
 }
 
+// ------------------------------------------------------- CPU / GPU / RAM bar
+function initSystemStats() {
+  const { mixer } = app;
+  const set = (id, pct, text, title) => {
+    const el = $(id);
+    el.querySelector('.v').textContent = text;
+    const bar = el.querySelector('.meter i');
+    if (bar) bar.style.width = `${Math.max(0, Math.min(100, pct || 0))}%`;
+    el.classList.toggle('warn', pct >= 60 && pct < 85);
+    el.classList.toggle('hot', pct >= 85);
+    el.title = title;
+  };
+  const renderStat = () => {
+    const s = mixer.stats;
+    const target = mixer.settings.fps;
+    const pct = (s.frameMs / (1000 / target)) * 100; // share of the frame budget
+    set('#statRender', s.fps < target * 0.9 ? 100 : pct, `${s.fps.toFixed(0)}/${target} fps`,
+      `Render loop: ${s.fps.toFixed(1)} fps (target ${target}), ${s.frameMs.toFixed(1)} ms per frame`);
+  };
+  setInterval(renderStat, 1000);
+  const left = $('#statusLeft');
+  const upLeft = () => {
+    const st = mixer.settings;
+    const o = app.outputs.status();
+    const parts = [`Unique AV Streaming GuRu ${app.info?.version ? `v${app.info.version}` : ''}`.trim(), `${st.width}×${st.height} ${st.fps}p`, `${mixer.inputs.length} inputs`];
+    if (o.recording) parts.push(`● Recording ${o.recordFile.split('/').pop()}`);
+    if (o.streaming) parts.push(`● Live${o.streamStats ? ` ${o.streamStats.bitrate}` : ''}`);
+    left.textContent = parts.join('   ·   ');
+  };
+  setInterval(upLeft, 1000);
+  upLeft();
+  if (!imix?.onSysmon) {
+    set('#statCpu', 0, 'n/a', 'CPU usage is available in the desktop app');
+    set('#statGpu', 0, 'n/a', 'GPU usage is available in the desktop app');
+    set('#statMem', 0, 'n/a', '');
+    return;
+  }
+  imix.onSysmon((st) => {
+    app.system = st;
+    set('#statCpu', st.cpu, `${st.cpu}%`, `System CPU ${st.cpu}% (${st.cores} cores)\nUnique AV Streaming GuRu: ${st.appCpu}%`);
+    if (st.gpu == null) set('#statGpu', 0, 'n/a', `GPU utilisation not available on this system\nGPU process CPU: ${st.gpuProcessCpu}%`);
+    else set('#statGpu', st.gpu, `${st.gpu}%`, `${st.gpuName || 'GPU'} ${st.gpu}%${st.gpuMemoryMB ? `\nGPU memory in use: ${st.gpuMemoryMB} MB` : ''}`);
+    const memPct = st.totalMemoryMB ? (st.memoryMB / st.totalMemoryMB) * 100 : 0;
+    set('#statMem', memPct, st.memoryMB >= 1024 ? `${(st.memoryMB / 1024).toFixed(1)} GB` : `${st.memoryMB} MB`,
+      `App memory ${st.memoryMB} MB of ${Math.round(st.totalMemoryMB / 1024)} GB`);
+  });
+}
+
 // --------------------------------------------------------------- bottom bar
 function initBottombar() {
   const { mixer, outputs } = app;
@@ -153,9 +201,15 @@ function initBottombar() {
   $('#bbMultiview').onclick = () => run(outputs.status().multiview ? outputs.multiviewWin.close() : chooseDisplay('Multiview Output', (id) => outputs.openMultiview(id)));
   $('#bbSnapshot').onclick = () => run(outputs.snapshot());
   $('#bbReplay').onclick = () => openReplay(app);
-  $('#bbScripts').onclick = () => openScripts(app);
-  $('#bbShortcuts').onclick = () => openShortcuts(app);
-  $('#bbLog').onclick = () => openLog(app);
+  $('#bbTools').onclick = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    contextMenu(r.left, r.top - 120, [
+      { label: 'Scripts…', action: () => openScripts(app) },
+      { label: 'Shortcuts & MIDI…', action: () => openShortcuts(app) },
+      { label: 'Output Log…', action: () => openLog(app) },
+      { label: 'Web Controller & API…', action: () => openSettings(app, 'api') },
+    ]);
+  };
   $('#bbSettings').onclick = () => openSettings(app);
   $('#bbProject').onclick = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -217,6 +271,19 @@ function initBridge() {
     imix.apiRespond(req.reqId, result);
   });
   mixer.on('tally', (t) => imix.apiTally(t));
+  // Real-time activator feedback for control surfaces (TCP "SUBSCRIBE ACTS")
+  let lastActs = '';
+  let lastActsAt = 0;
+  mixer.on('frame', (now) => {
+    if (now - lastActsAt < 100) return;
+    lastActsAt = now;
+    const acts = api.acts();
+    const json = JSON.stringify(acts);
+    if (json !== lastActs) {
+      lastActs = json;
+      imix.apiActs(acts);
+    }
+  });
   imix.onBrowserFrame((f) => mixer.getInput(f.id)?.onFrame(f));
   imix.onLog((msg) => outputs.addLog(msg));
   imix.onMenu(({ cmd, arg }) => {
@@ -344,6 +411,7 @@ async function main() {
   initOverlayStatus(app);
   initTopbar();
   initBottombar();
+  initSystemStats();
   initBridge();
   if (imix && mixer.settings.ffmpegPath) imix.ffmpegSetPath(mixer.settings.ffmpegPath);
 

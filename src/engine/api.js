@@ -239,6 +239,52 @@ function buildFunctions(app) {
       m.emit('replay');
     },
 
+    // ------------------------------------------- control-surface extras
+    AutoPlayOn: (p) => setFlag(p, 'autoPlay', true),
+    AutoPlayOff: (p) => setFlag(p, 'autoPlay', false),
+    AutoPauseOn: (p) => setFlag(p, 'autoPause', true),
+    AutoPauseOff: (p) => setFlag(p, 'autoPause', false),
+    AutoRestartOn: (p) => setFlag(p, 'autoRestart', true),
+    AutoRestartOff: (p) => setFlag(p, 'autoRestart', false),
+    SoloOn: (p) => { const i = needInput(m, p); if (m.audio.solo !== i.id) m.audio.setSolo(i.id); },
+    SoloOff: (p) => { const i = needInput(m, p); if (m.audio.solo === i.id) m.audio.setSolo(i.id); },
+    BusXAudioOn: (p) => m.audio.buses[busKey(p.Value)]?.set(undefined, false),
+    BusXAudioOff: (p) => m.audio.buses[busKey(p.Value)]?.set(undefined, true),
+    BusXSolo: (p) => m.audio.setMonitor(true, m.audio.monitorBus === busKey(p.Value) ? 'M' : busKey(p.Value)),
+    BusXSoloOn: (p) => m.audio.setMonitor(true, busKey(p.Value)),
+    BusXSoloOff: () => m.audio.setMonitor(m.audio.monitorOn, 'M'),
+    SetHeadphonesVolume: (p) => m.audio.monitor.gain.setTargetAtTime(faderToGain(num(p.Value, 100)), m.audio.ctx.currentTime, 0.02),
+    SetCropX1: (p) => setCrop(p, 'l', (v) => v),
+    SetCropX2: (p) => setCrop(p, 'r', (v) => 1 - v),
+    SetCropY1: (p) => setCrop(p, 't', (v) => v),
+    SetCropY2: (p) => setCrop(p, 'b', (v) => 1 - v),
+    ColourCorrectionReset: (p) => {
+      const i = needInput(m, p);
+      Object.assign(i.settings.color, { brightness: 0, contrast: 1, saturation: 1, hue: 0, gamma: 1 });
+      m.inputChanged(i);
+    },
+    SetColor: (p) => needInput(m, p).setColor?.(p.Value),
+    SnapshotInput: async (p) => {
+      const url = o().snapshotDataUrl(needInput(m, p));
+      if (!url) throw new Error('Nothing to snapshot');
+      if (!window.imix?.writeBinary) return;
+      const info = await window.imix.info();
+      const bin = Uint8Array.from(atob(url.split(',')[1]), (c) => c.charCodeAt(0));
+      await window.imix.writeBinary(`${m.settings.recordDir || info.moviesDir}/${needInput(m, p).title} ${Date.now()}.png`, bin);
+    },
+    SuspendCountdown: (p) => needInput(m, p).countdown?.('pause'),
+    ChangeCountdown: (p) => needInput(m, p).countdown?.('set', p.Value),
+    SetTickerSpeed: (p) => needInput(m, p).setStyle?.({ speed: num(p.Value, 160) }),
+    StreamingSetURL: (p) => setDest(p, 'url'),
+    StreamingSetKey: (p) => setDest(p, 'key'),
+    Fullscreen: () => (o().status().external ? o().closeExternal() : o().openExternal(null)),
+    FullscreenOn: () => o().openExternal(null),
+    FullscreenOff: () => o().closeExternal(),
+    ReplayMarkInLive: () => m.replay.markIn(),
+    ReplayLive: () => m.replay.pause(),
+    NextPlayListEntry: (p) => (optInput(m, p) || m.getInput(m.previewId))?.next?.(),
+    PreviousPlayListEntry: (p) => (optInput(m, p) || m.getInput(m.previewId))?.previous?.(),
+
     // -------------------------------------------------------------- scripts
     ScriptStart: (p) => app.scripts.start(p.Value),
     ScriptStop: (p) => app.scripts.stop(p.Value),
@@ -307,6 +353,24 @@ function buildFunctions(app) {
     if (/^[+-]/.test(s) && key !== 'opacity') v = i.settings[key] + num(s);
     i.settings[key] = key === 'zoom' ? Math.max(0, v) : v;
     m.inputChanged(i);
+  }
+
+  function setFlag(p, key, v) {
+    const i = needInput(m, p);
+    i.settings[key] = v;
+    m.inputChanged(i);
+  }
+
+  function setCrop(p, edge, map) {
+    const i = needInput(m, p);
+    i.settings.crop[edge] = Math.max(0, Math.min(1, map(num(p.Value))));
+    m.inputChanged(i);
+  }
+
+  function setDest(p, field) {
+    const d = m.streamDestinations[num(p.StreamingChannel ?? p.Channel, 0)] || m.streamDestinations[0];
+    d[field] = String(p.Value ?? '');
+    m.emit('project-changed');
   }
 
   function setKey(p, mode) {
@@ -400,25 +464,99 @@ export class Api {
       external: o.status().external,
       replay: { recording: m.replay.recording, playing: m.replay.playing, events: m.replay.events.length },
       transitionProgress: m.trans ? m.transProgress(now) : 0,
+      system: { ...(this.app.system || {}), fps: Math.round(m.stats.fps * 10) / 10, frameMs: Math.round(m.stats.frameMs * 10) / 10 },
     };
   }
 
+  // XML state in the layout switcher control surfaces (e.g. Bitfocus
+  // Companion's vMix module, Stream Deck plugins) parse.
   stateXml() {
+    const m = this.app.mixer;
     const s = this.stateJson();
     const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const tf = (b) => (b ? 'True' : 'False');
+    const num = (v, d = 3) => Number(v || 0).toFixed(d);
+    const meters = m.audio.meters();
     const typeMap = { camera: 'Capture', audio: 'AudioDevice', screen: 'Capture', video: 'Video', list: 'VideoList', image: 'Image', audiofile: 'AudioFile', title: 'GT', colour: 'Colour', browser: 'Browser', url: 'Stream', replay: 'Replay' };
-    const inputs = s.inputs.map((i) => {
-      const fields = i.fields ? Object.entries(i.fields).map(([k, v], n) => `<text index="${n}" name="${esc(k)}">${esc(v)}</text>`).join('') : '';
-      return `<input key="${esc(i.key)}" number="${i.number}" type="${typeMap[i.type] || i.type}" title="${esc(i.title)}" shortTitle="${esc(i.title)}" state="${i.state}" position="${i.position}" duration="${i.duration}" loop="${tf(i.loop)}"${i.hasAudio ? ` muted="${tf(i.muted)}" volume="${i.volume}" balance="0" solo="False" audiobusses="M"` : ''}>${esc(i.title)}${fields}</input>`;
+    const inputs = m.inputs.map((inp, idx) => {
+      const a = inp.settings.audio;
+      const st = inp.settings;
+      const attrs = [
+        `key="${esc(inp.id)}"`, `number="${idx + 1}"`, `type="${typeMap[inp.type] || inp.type}"`, `title="${esc(inp.title)}"`, `shortTitle="${esc(inp.title)}"`,
+        `state="${inp.state}"`, `position="${Math.round(inp.position)}"`, `duration="${Math.round(inp.duration)}"`, `loop="${tf(st.loop)}"`,
+      ];
+      if (inp.type === 'list') attrs.push(`selectedIndex="${(inp.index || 0) + 1}"`);
+      if (inp.hasAudio) {
+        const lv = meters[inp.id] || [0, 0];
+        const buses = ['M', 'A', 'B'].filter((b) => a.buses[b]).join(',');
+        attrs.push(`muted="${tf(a.muted)}"`, `volume="${num(a.volume, 2)}"`, `balance="${num(a.balance, 2)}"`, `solo="${tf(m.audio.solo === inp.id)}"`,
+          `audiobusses="${buses}"`, `meterF1="${num(lv[0], 5)}"`, `meterF2="${num(lv[1], 5)}"`, `gainDb="${num(a.gain, 1)}"`);
+      }
+      const layers = st.layers.map((l, n) => (l.enabled && l.inputId && m.getInput(l.inputId)
+        ? `<overlay index="${n}" key="${esc(l.inputId)}"><position panX="${num(l.x * 2 + l.w - 1)}" panY="${num(1 - l.y * 2 - l.h)}" zoomX="${num(l.w)}" zoomY="${num(l.h)}"/></overlay>`
+        : '')).join('');
+      const fields = inp.fields ? Object.entries(inp.fields).map(([k, v], n) => `<text index="${n}" name="${esc(k)}">${esc(v)}</text>`).join('') : '';
+      const position = `<position panX="${num(st.panX)}" panY="${num(st.panY)}" zoomX="${num(st.zoom)}" zoomY="${num(st.zoom)}"/>`;
+      return `<input ${attrs.join(' ')}>${esc(inp.title)}${layers}${fields}${position}</input>`;
     }).join('');
     const overlays = s.overlays.map((o) => `<overlay number="${o.number}">${o.active && o.input ? o.input : ''}</overlay>`).join('');
     const transitions = s.transitions.map((t) => `<transition number="${t.number}" effect="${esc(t.effect.replace(/\s+/g, ''))}" duration="${t.duration}"/>`).join('');
+    const bus = (tag, b, extra = '') => {
+      const lv = meters[`bus:${b}`] || [0, 0];
+      const bb = m.audio.buses[b];
+      return `<${tag} volume="${num(bb.volume, 2)}" muted="${tf(bb.muted)}" meterF1="${num(lv[0], 5)}" meterF2="${num(lv[1], 5)}"${extra}/>`;
+    };
+    const o = this.app.outputs.status();
+    const recDuration = o.recording ? Math.floor((Date.now() - o.recordStarted) / 1000) : 0;
     return `<vmix><version>1.0.0</version><edition>Unique AV Streaming GuRu</edition><inputs>${inputs}</inputs><overlays>${overlays}</overlays>`
       + `<preview>${s.preview}</preview><active>${s.program}</active><fadeToBlack>${tf(s.fadeToBlack)}</fadeToBlack>`
-      + `<transitions>${transitions}</transitions><recording>${tf(s.recording)}</recording><external>${tf(s.external)}</external>`
+      + `<transitions>${transitions}</transitions>`
+      + (o.recording ? `<recording duration="${recDuration}">True</recording>` : '<recording>False</recording>')
+      + `<external>${tf(s.external)}</external>`
       + `<streaming>${tf(s.streaming)}</streaming><playList>False</playList><multiCorder>False</multiCorder><fullscreen>False</fullscreen>`
-      + `<audio><master volume="${s.master.volume}" muted="${tf(s.master.muted)}" headphonesVolume="100"/></audio></vmix>`;
+      + `<audio>${bus('master', 'M', ` headphonesVolume="100"`)}${bus('busA', 'A', ' solo="False" sendToMaster="False"')}${bus('busB', 'B', ' solo="False" sendToMaster="False"')}</audio></vmix>`;
+  }
+
+  // Activator values for "SUBSCRIBE ACTS" (real-time feedback for control surfaces).
+  acts() {
+    const m = this.app.mixer;
+    const o = this.app.outputs.status();
+    const b = (v) => (v ? '1' : '0');
+    const vol = (v) => (Math.round(v) / 100).toString();
+    const out = {};
+    m.inputs.forEach((inp, idx) => {
+      const n = idx + 1;
+      out[`Input ${n}`] = b(m.programId === inp.id);
+      out[`InputPreview ${n}`] = b(m.previewId === inp.id);
+      out[`InputPlaying ${n}`] = b(inp.state === 'Running');
+      if (inp.hasAudio) {
+        const a = inp.settings.audio;
+        out[`InputVolume ${n}`] = vol(a.volume);
+        out[`InputAudio ${n}`] = b(!a.muted);
+        out[`InputAudioAuto ${n}`] = b(a.afv);
+        out[`InputSolo ${n}`] = b(m.audio.solo === inp.id);
+        out[`InputMasterAudio ${n}`] = b(a.buses.M);
+        out[`InputBusAAudio ${n}`] = b(a.buses.A);
+        out[`InputBusBAudio ${n}`] = b(a.buses.B);
+      }
+    });
+    m.overlays.forEach((ov, i) => {
+      const inp = ov.inputId && m.getInput(ov.inputId);
+      if (inp) out[`Overlay${i + 1} ${m.inputNumber(inp)}`] = b(ov.state !== 'off');
+    });
+    out.MasterVolume = vol(m.audio.buses.M.volume);
+    out.MasterAudio = b(!m.audio.buses.M.muted);
+    out.BusAVolume = vol(m.audio.buses.A.volume);
+    out.BusAAudio = b(!m.audio.buses.A.muted);
+    out.BusBVolume = vol(m.audio.buses.B.volume);
+    out.BusBAudio = b(!m.audio.buses.B.muted);
+    out.FadeToBlack = b(m.ftb.on);
+    out.Recording = b(o.recording);
+    out.Streaming = b(o.streaming);
+    out.External = b(o.external);
+    out.ReplayRecording = b(m.replay.recording);
+    out.ReplayPlaying = b(m.replay.playing);
+    return out;
   }
 }
 

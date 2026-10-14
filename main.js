@@ -11,6 +11,7 @@ const ffmpeg = require('./main/ffmpeg');
 const { ApiServer } = require('./main/api-server');
 const { BrowserInputs } = require('./main/browser-input');
 const { Updater } = require('./main/updater');
+const { SystemMonitor } = require('./main/sysmon');
 const pkg = require('./package.json');
 
 const APP_NAME = 'Unique AV Streaming GuRu';
@@ -78,6 +79,8 @@ const apiServer = new ApiServer(
   (msg) => send('log', msg)
 );
 ipcMain.on('api-tally', (_e, tally) => apiServer.pushTally(tally));
+ipcMain.on('api-acts', (_e, acts) => apiServer.pushActs(acts));
+const sysmon = new SystemMonitor((stats) => send('sysmon', stats));
 
 function send(channel, data) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, data);
@@ -432,6 +435,7 @@ app.whenReady().then(async () => {
   registerIpc();
   buildMenu();
   createMainWindow();
+  sysmon.start();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
@@ -440,6 +444,7 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', () => {
   quitting = true;
+  sysmon.stop();
   // A downloaded update is installed when the app quits (no relaunch).
   if (updater.state.status === 'ready' && !updater.installing) updater.install({ relaunch: false, force: true });
   streamer.stop();

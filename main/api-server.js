@@ -2,7 +2,7 @@
 // existing control surfaces (e.g. Bitfocus Companion, Stream Deck plugins)
 // can be pointed at Unique AV Streaming GuRu:
 //   HTTP  :8088  GET /api?Function=Cut&Input=2   GET /api (XML state)
-//   TCP   :8099  FUNCTION Cut Input=2 | XML | TALLY | SUBSCRIBE TALLY
+//   TCP   :8099  FUNCTION Cut Input=2 | XML | TALLY | SUBSCRIBE TALLY|ACTS | PING
 // plus a touch-friendly web controller at http://<host>:8088/
 const http = require('http');
 const net = require('net');
@@ -21,6 +21,7 @@ class ApiServer {
     this.tcpClients = new Set();
     this.config = { enabled: true, httpPort: 8088, tcpPort: 8099, lan: false, password: '' };
     this.lastTally = '';
+    this.acts = {}; // activator name (e.g. "Input 3") -> value string
   }
 
   async apply(config) {
@@ -137,6 +138,8 @@ class ApiServer {
     this.tcpClients.add(sock);
     sock.setEncoding('utf8');
     sock.tally = false;
+    sock.acts = false;
+    sock.write('VERSION OK 1.0.0\r\n');
     let buf = '';
     let authed = !this.config.password;
     sock.on('data', async (data) => {
@@ -171,14 +174,31 @@ class ApiServer {
             const json = await this.bridge.json();
             sock.write(`TALLY OK ${json.tally}\r\n`);
           } else if (cmd === 'SUBSCRIBE') {
-            if ((rest[0] || '').toUpperCase() === 'TALLY') {
+            const what = (rest[0] || '').toUpperCase();
+            if (what === 'TALLY') {
               sock.tally = true;
               sock.write('SUBSCRIBE OK TALLY\r\n');
               if (this.lastTally) sock.write(`TALLY OK ${this.lastTally}\r\n`);
+            } else if (what === 'ACTS') {
+              sock.acts = true;
+              sock.write('SUBSCRIBE OK ACTS\r\n');
+              const lines = Object.entries(this.acts).filter(([, v]) => v !== '0').map(([k, v]) => `ACTS OK ${k} ${v}\r\n`);
+              if (lines.length) sock.write(lines.join(''));
             } else sock.write(`SUBSCRIBE ER Unsupported\r\n`);
           } else if (cmd === 'UNSUBSCRIBE') {
-            sock.tally = false;
-            sock.write('UNSUBSCRIBE OK TALLY\r\n');
+            const what = (rest[0] || 'TALLY').toUpperCase();
+            if (what === 'ACTS') sock.acts = false;
+            else sock.tally = false;
+            sock.write(`UNSUBSCRIBE OK ${what}\r\n`);
+          } else if (cmd === 'ACTS') {
+            // Query one activator: "ACTS Input 3" or "ACTS MasterVolume"
+            const name = rest.join(' ');
+            const key = Object.keys(this.acts).find((k) => k.toLowerCase() === name.toLowerCase());
+            if (key) sock.write(`ACTS OK ${key} ${this.acts[key]}\r\n`);
+            else if (rest[0]) sock.write(`ACTS OK ${name} 0\r\n`);
+            else sock.write('ACTS ER Activator name required\r\n');
+          } else if (cmd === 'PING') {
+            sock.write('PING OK PONG\r\n');
           } else if (cmd === 'VERSION') {
             sock.write('VERSION OK 1.0.0\r\n');
           } else if (cmd === 'QUIT') {
@@ -194,6 +214,22 @@ class ApiServer {
     });
     sock.on('close', () => this.tcpClients.delete(sock));
     sock.on('error', () => this.tcpClients.delete(sock));
+  }
+
+  // Activators: real-time state changes pushed to "SUBSCRIBE ACTS" clients,
+  // e.g. "ACTS OK Input 3 1", "ACTS OK InputVolume 2 0.8", "ACTS OK Recording 1".
+  pushActs(next) {
+    const lines = [];
+    for (const [k, v] of Object.entries(next)) {
+      if (this.acts[k] !== v) lines.push(`ACTS OK ${k} ${v}\r\n`);
+    }
+    for (const k of Object.keys(this.acts)) {
+      if (!(k in next) && this.acts[k] !== '0') lines.push(`ACTS OK ${k} 0\r\n`);
+    }
+    this.acts = next;
+    if (!lines.length) return;
+    const msg = lines.join('');
+    for (const s of this.tcpClients) if (s.acts) s.write(msg);
   }
 
   pushTally(tally) {

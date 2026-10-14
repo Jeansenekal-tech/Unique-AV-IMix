@@ -52,6 +52,8 @@ contextBridge.exposeInMainWorld('imix', {
   onApiRequest: on('api-request'),
   apiRespond: (reqId, result) => ipcRenderer.send('api-response', { reqId, result }),
   apiTally: (tally) => ipcRenderer.send('api-tally', tally),
+  apiActs: (acts) => ipcRenderer.send('api-acts', acts),
+  onSysmon: on('sysmon'),
   netAddresses: () => ipcRenderer.invoke('net:addresses'),
 
   setStatus: (status) => ipcRenderer.send('app:status', status),

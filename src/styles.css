@@ -28,7 +28,7 @@ input, textarea, select { user-select: text; -webkit-user-select: text; }
 button { font: inherit; color: inherit; }
 .hidden { display: none !important; }
 
-#app { display: grid; grid-template-rows: 40px minmax(300px, 52%) 1fr 48px; height: 100vh; }
+#app { display: grid; grid-template-rows: 40px minmax(300px, 52%) 1fr 46px 24px; height: 100vh; }
 
 /* ------------------------------------------------------------- top bar */
 #topbar { display: flex; align-items: center; gap: 16px; padding: 0 14px 0 88px; background: var(--bg2); border-bottom: 1px solid var(--line); -webkit-app-region: drag; }
@@ -146,6 +146,21 @@ body.web #topbar { padding-left: 14px; }
 #bbStream.active { background: #c2185b; border-color: #c2185b; }
 #bbExternal.active, #bbMultiview.active { background: var(--accent); border-color: var(--accent); }
 .ov-status { font-weight: 700; min-width: 34px; }
+/* bottom status strip */
+#statusbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 12px; background: var(--bg); border-top: 1px solid var(--line); min-width: 0; }
+.status-left { font: 11px var(--mono); color: var(--text3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#statusbar .api-status { padding: 1px 8px; }
+
+/* CPU / GPU / RAM / render stats */
+.sys-stats { display: flex; gap: 16px; align-items: center; font: 11px var(--mono); color: var(--text2); white-space: nowrap; }
+.sys-stats .stat { display: flex; align-items: center; gap: 5px; }
+.sys-stats b { font: 700 10px var(--font); letter-spacing: .6px; color: var(--text3); }
+.sys-stats .meter { width: 44px; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; border: 1px solid var(--line); }
+.sys-stats .meter i { display: block; height: 100%; width: 0; background: var(--preview); transition: width .4s, background .4s; }
+.sys-stats .stat.warn .meter i { background: var(--warn); }
+.sys-stats .stat.hot .meter i { background: var(--program); }
+.sys-stats .stat.hot .v { color: var(--program); }
+.sys-stats .v { min-width: 30px; text-align: right; }
 .api-status { font: 11px var(--mono); color: var(--text3); cursor: pointer; padding: 3px 8px; border-radius: 4px; background: var(--bg3); }
 .api-status.ok { color: var(--preview); }
 
