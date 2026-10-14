@@ -251,7 +251,3 @@ vMix has had more than 15 years of development, and some of its features depend 
 * Instant replay records one source at a time. vMix can record up to 8 cameras.
 
 The engine is modular, with one class per input or output, so each of these can be added on its own later.
-
-## Unique AV Recorder for Windows
-
-[`windows-recorder/`](windows-recorder/) holds a separate, basic Windows recorder. It records video from capture cards and webcams, and audio from USB devices, with input gain, volume, mute and level meters. It saves to MP4, MKV, WAV or M4A. The **Build Windows recorder** workflow builds a Windows installer `.exe` and a portable `.exe`. See its [README](windows-recorder/README.md).
