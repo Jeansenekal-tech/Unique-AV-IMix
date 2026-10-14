@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; media-src 'self' blob: mediastream:; style-src 'self'; script-src 'self'">
+  <title>Unique AV Recorder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="layout">
+    <section class="monitor">
+      <div class="screen">
+        <video id="preview" autoplay muted playsinline></video>
+        <div id="noVideo" class="no-video">No video device selected</div>
+        <div id="recBadge" class="rec-badge" hidden><span class="dot"></span>REC <span id="recBadgeTime">00:00:00</span></div>
+        <div id="videoInfo" class="video-info"></div>
+      </div>
+      <div class="meters" aria-label="Audio level">
+        <div class="meter"><span class="ch">L</span><div class="bar"><div class="fill"></div><div id="meterL" class="cover"></div><div id="peakL" class="peak"></div></div></div>
+        <div class="meter"><span class="ch">R</span><div class="bar"><div class="fill"></div><div id="meterR" class="cover"></div><div id="peakR" class="peak"></div></div></div>
+        <div class="scale"><span>-60</span><span>-40</span><span>-20</span><span>-12</span><span>-6</span><span>0 dB</span></div>
+      </div>
+      <div class="transport">
+        <button id="recordBtn" class="record" title="Start / stop recording (F9)"><span class="icon"></span><span id="recordLabel">Record</span></button>
+        <div class="stats">
+          <div><label>Time</label><span id="time">00:00:00</span></div>
+          <div><label>Size</label><span id="size">–</span></div>
+          <div><label>Free space</label><span id="free">–</span></div>
+        </div>
+      </div>
+      <div id="status" class="status" role="status"></div>
+    </section>
+
+    <aside class="panel">
+      <h2>Video</h2>
+      <label class="field">Video device
+        <select id="videoDevice"></select>
+      </label>
+      <div class="row">
+        <label class="field">Resolution
+          <select id="resolution">
+            <option value="">Device default</option>
+            <option value="3840x2160">3840 × 2160 (4K)</option>
+            <option value="2560x1440">2560 × 1440</option>
+            <option value="1920x1080">1920 × 1080</option>
+            <option value="1280x720">1280 × 720</option>
+            <option value="720x576">720 × 576 (PAL)</option>
+            <option value="720x480">720 × 480 (NTSC)</option>
+            <option value="640x480">640 × 480</option>
+          </select>
+        </label>
+        <label class="field">Frame rate
+          <select id="fps">
+            <option value="">Device default</option>
+            <option value="60">60</option>
+            <option value="59.94">59.94</option>
+            <option value="50">50</option>
+            <option value="30">30</option>
+            <option value="29.97">29.97</option>
+            <option value="25">25</option>
+            <option value="24">24</option>
+          </select>
+        </label>
+      </div>
+
+      <h2>Audio</h2>
+      <label class="field">Audio device
+        <select id="audioDevice"></select>
+      </label>
+      <label class="field" title="Input gain (trim): boosts or cuts the device's signal before the volume fader. Double-click to reset.">
+        <span class="label-row">Input gain <output id="gainOut">0 dB</output></span>
+        <input id="gain" type="range" min="-24" max="36" step="0.5" value="0">
+      </label>
+      <label class="field" title="Recording volume. Double-click to reset.">
+        <span class="label-row">Volume <output id="volumeOut">0 dB</output></span>
+        <div class="fader-row">
+          <input id="volume" type="range" min="-60" max="12" step="0.5" value="0">
+          <button id="mute" type="button" class="mute" aria-pressed="false" title="Mute the audio in the recording">Mute</button>
+        </div>
+      </label>
+      <label class="check"><input id="monitor" type="checkbox"> Listen to the input (monitor)</label>
+
+      <h2>Recording</h2>
+      <label class="field">Format
+        <select id="format"></select>
+      </label>
+      <label class="field" id="bitrateField">Video quality
+        <select id="bitrate">
+          <option value="6">6 Mbps – small files</option>
+          <option value="10">10 Mbps</option>
+          <option value="16" selected>16 Mbps – good for 1080p</option>
+          <option value="25">25 Mbps</option>
+          <option value="40">40 Mbps – good for 4K</option>
+          <option value="60">60 Mbps – highest</option>
+        </select>
+      </label>
+      <label class="field">File name
+        <input id="name" type="text" value="Recording" spellcheck="false">
+      </label>
+      <label class="field">Save to
+        <div class="folder"><input id="folder" type="text" readonly><button id="chooseFolder">Browse…</button></div>
+      </label>
+      <button id="openFolder" class="link">Open recordings folder</button>
+
+      <h2>Recent</h2>
+      <ul id="recent" class="recent"><li class="empty">No recordings yet</li></ul>
+    </aside>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
