@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Unique AV IMix – Multiview</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    canvas { width: 100%; height: 100%; display: block; }
+  </style>
+</head>
+<body>
+  <canvas id="mv"></canvas>
+  <script>
+    // Multiview: Preview + Output on top, input grid below, with tally borders,
+    // labels and a clock. Draws straight from the mixer window's canvases.
+    const canvas = document.getElementById('mv');
+    const ctx = canvas.getContext('2d');
+    function mixer() { return window.imixMixer || (window.opener && window.opener.imixApp && window.opener.imixApp.mixer); }
+    function label(text, x, y, w, color) {
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.fillRect(x, y + 0, w, 26);
+      ctx.fillStyle = color || '#fff';
+      ctx.font = '600 15px -apple-system, Helvetica, Arial';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, x + 8, y + 13, w - 16);
+    }
+    function frame() {
+      const m = mixer();
+      const W = canvas.width = window.innerWidth * devicePixelRatio;
+      const H = canvas.height = window.innerHeight * devicePixelRatio;
+      ctx.fillStyle = '#0b0c0f';
+      ctx.fillRect(0, 0, W, H);
+      if (m && m.compositor) {
+        const top = H * 0.5;
+        const bw = W / 2;
+        const bh = Math.min(top, bw * 9 / 16);
+        const pv = m.compositor.previewCanvas;
+        const pg = m.compositor.canvas;
+        if (pv) ctx.drawImage(pv.ctx.canvas, 0, 0, bw - 4, bh);
+        ctx.drawImage(pg, bw + 4, 0, bw - 4, bh);
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = '#30a46c'; ctx.strokeRect(2, 2, bw - 8, bh - 4);
+        ctx.strokeStyle = '#e5484d'; ctx.strokeRect(bw + 6, 2, bw - 8, bh - 4);
+        const p = m.getInput(m.previewId), o = m.getInput(m.programId);
+        label('PREVIEW  ' + (p ? p.title : ''), 2, bh - 28, bw - 8, '#7ee2a8');
+        label('OUTPUT  ' + (o ? o.title : ''), bw + 6, bh - 28, bw - 8, '#ff9a9e');
+        const inputs = m.inputs.filter(i => i.thumbCtx);
+        const cols = Math.max(4, Math.ceil(Math.sqrt(inputs.length * 2)));
+        const tw = W / cols;
+        const th = tw * 9 / 16;
+        inputs.forEach((inp, i) => {
+          const x = (i % cols) * tw, y = bh + 10 + Math.floor(i / cols) * (th + 4);
+          if (y > H) return;
+          ctx.drawImage(inp.thumbCtx.canvas, x + 2, y, tw - 4, th);
+          const onAir = m.isOnAir(inp), pvw = inp.id === m.previewId;
+          if (onAir || pvw) { ctx.strokeStyle = onAir ? '#e5484d' : '#30a46c'; ctx.lineWidth = 4; ctx.strokeRect(x + 4, y + 2, tw - 8, th - 4); }
+          label((m.inputs.indexOf(inp) + 1) + '. ' + inp.title, x + 2, y + th - 26, tw - 4);
+        });
+        ctx.fillStyle = '#fff';
+        ctx.font = '700 22px Menlo, monospace';
+        ctx.textBaseline = 'top';
+        ctx.fillText(new Date().toLocaleTimeString([], { hour12: false }), W - 140, H - 36);
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+    document.addEventListener('dblclick', () => {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen().catch(() => {});
+    });
+  </script>
+</body>
+</html>
