@@ -13,6 +13,7 @@ const { BrowserInputs } = require('./main/browser-input');
 const { Updater } = require('./main/updater');
 const { SystemMonitor } = require('./main/sysmon');
 const { CountdownHost } = require('./main/countdown-host');
+const { OseeBridge } = require('./osee/server');
 const pkg = require('./package.json');
 
 const APP_NAME = 'Unique AV Streaming GuRu';
@@ -94,6 +95,34 @@ const countdown = new CountdownHost({
     return st.status === 'uptodate' ? `Up to date (${st.current})` : st.status === 'error' ? `Update check failed: ${st.error}` : `Updates: ${st.status}${st.latest ? ` ${st.latest}` : ''}`;
   },
 });
+
+// OSEE Switcher Remote: iPad control of OSEE GoStream switchers, served on
+// port 8090 while the app runs (see osee/).
+let oseeBridge = null;
+async function startOseeBridge() {
+  try {
+    oseeBridge = new OseeBridge({ port: 8090, configFile: path.join(app.getPath('userData'), 'osee-devices.json') });
+    await oseeBridge.start();
+  } catch (e) {
+    oseeBridge = null;
+    console.warn(`OSEE Switcher Remote not started: ${e.message}`);
+  }
+}
+function showOseeRemote() {
+  if (!oseeBridge) {
+    dialog.showMessageBox(mainWindow, { type: 'warning', message: 'OSEE Switcher Remote is not running', detail: 'Port 8090 is probably in use by another program.' });
+    return;
+  }
+  const urls = oseeBridge.urls();
+  dialog.showMessageBox(mainWindow, {
+    message: 'OSEE Switcher Remote',
+    detail: `Open this address in Safari on your iPad (same network as this Mac):\n\n${urls.join('\n') || `http://<this-mac>:${oseeBridge.port}/`}\n\nAdd your GoStream switchers with the ＋ button. In Safari, Share → Add to Home Screen makes it full screen.`,
+    buttons: ['Open Here', 'OK'],
+    defaultId: 1,
+  }).then(({ response }) => {
+    if (response === 0) shell.openExternal(`http://localhost:${oseeBridge.port}/`).catch(() => {});
+  });
+}
 
 function send(channel, data) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, data);
@@ -248,6 +277,8 @@ function buildMenu() {
         { label: 'Scripting…', click: menuCommand('scripts') },
         { label: 'Shortcuts & MIDI…', click: menuCommand('shortcuts') },
         { label: 'Web Controller & API…', click: menuCommand('settings', 'api') },
+        { type: 'separator' },
+        { label: 'OSEE Switcher Remote (iPad)…', click: () => showOseeRemote() },
       ],
     },
     {
@@ -463,6 +494,7 @@ app.whenReady().then(async () => {
 
   registerIpc();
   countdown.start();
+  startOseeBridge();
   buildMenu();
   createMainWindow();
   sysmon.start();
@@ -485,6 +517,7 @@ app.on('before-quit', () => {
   deviceOutputs.stopAll();
   browserInputs.closeAll();
   apiServer.stop();
+  if (oseeBridge) oseeBridge.stop();
 });
 
 app.on('window-all-closed', () => {

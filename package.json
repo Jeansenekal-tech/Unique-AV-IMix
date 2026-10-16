@@ -13,7 +13,9 @@
     "dist:mac": "electron-builder --mac",
     "dist:mac:arm64": "electron-builder --mac --arm64",
     "dist:mac:x64": "electron-builder --mac --x64",
-    "test": "node test/unit-updater.mjs && node test/unit-sysmon.mjs && node test/countdown-engine-test.cjs && node test/browser-smoke.mjs",
+    "test": "node test/unit-updater.mjs && node test/unit-sysmon.mjs && node test/countdown-engine-test.cjs && node test/unit-osee.mjs && node test/browser-smoke.mjs",
+    "osee": "node osee/server.js",
+    "osee:sim": "node osee/sim.js",
     "test:electron": "xvfb-run -a node test/electron-smoke.mjs",
     "manifest": "node scripts/make-update-manifest.mjs dist"
   },
@@ -35,7 +37,9 @@
       "src/**/*",
       "package.json",
       "build/icon.png",
-      "countdown/**/*"
+      "countdown/**/*",
+      "osee/**/*",
+      "!osee/osee-devices.json"
     ],
     "asarUnpack": [
       "node_modules/ffmpeg-static/**"

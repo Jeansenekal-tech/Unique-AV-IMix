@@ -235,6 +235,11 @@ for (let i = 0; i < 20 && !cdState; i++) {
   }
 }
 check(cdState && cdState.running && Array.isArray(cdState.segments), `countdown phone remote on :8080 (${cdState?.time} running=${cdState?.running})`);
+let oseeInfo = null;
+try {
+  oseeInfo = await (await fetch('http://127.0.0.1:8090/api/info')).json();
+} catch { /* checked below */ }
+check(oseeInfo && oseeInfo.name === 'OSEE Switcher Remote', 'OSEE Switcher Remote served on :8090');
 await new Promise((resolve) => {
   const sock = dgram.createSocket('udp4');
   const pad = (b) => Buffer.concat([b, Buffer.alloc(4 - (b.length % 4))]);

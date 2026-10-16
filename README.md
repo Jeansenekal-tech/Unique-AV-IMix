@@ -97,6 +97,9 @@ It also connects to the mixer:
 * The API uses the function names and XML layout that common switcher control surfaces expect, so tools such as Bitfocus Companion and Stream Deck can drive it.
 * **Web controller:** open `http://<mac-ip>:8088/` on a phone or tablet. You can switch inputs, run overlays, edit titles, mix audio and start or stop the recording and stream. LAN access and a password are configured in *Settings → Web & API*.
 
+### OSEE Switcher Remote (iPad)
+A touch web interface for **OSEE GoStream** switchers: **GoStream Deck, Deck Plus, Duet, Duet SDI and Duet 8 ISO**. It runs inside Streaming GuRu, or on its own on any computer with Node.js. See [OSEE Switcher Remote](#osee-switcher-remote-ipad-control-for-gostream-switchers) below.
+
 ### Status bar
 * **CPU** shows whole-system usage and, on hover, how much of it this app uses.
 * **GPU** shows GPU utilisation from macOS's own graphics statistics; on hover it shows the GPU model and GPU memory in use. It works on Apple Silicon, Intel and AMD GPUs and needs no admin rights.
@@ -152,6 +155,7 @@ The app looks for updates through `updateUrl` in `package.json`, which by defaul
 node test/unit-updater.mjs                  # updater version logic + release manifest
 node test/unit-sysmon.mjs                   # GPU utilisation parsing
 node test/countdown-engine-test.cjs         # Unique AV Countdown engine + OSC (upstream tests)
+node test/unit-osee.mjs                     # OSEE GoStream protocol + remote bridge, against the simulator
 node test/browser-smoke.mjs                 # UI + engine in headless Chromium (needs playwright + ffmpeg)
 xvfb-run -a node test/electron-smoke.mjs    # full app: HTTP/TCP API, recording, FFmpeg streaming, browser input
 ```
@@ -171,6 +175,37 @@ xvfb-run -a node test/electron-smoke.mjs    # full app: HTTP/TCP API, recording,
 | ⌘S / ⌘O | Save / Open project |
 
 Click a tile to put it in Preview. Double-click a tile to open its settings, and right-click it for more actions.
+
+## OSEE Switcher Remote: iPad control for GoStream switchers
+
+Control one or several OSEE GoStream switchers from Safari on an iPad (or any tablet, phone or computer). The switchers speak a TCP protocol that browsers can't use directly, so a small bridge runs on a computer on the same network and serves the web interface.
+
+**Supported switchers:** GoStream Deck, Deck Plus, Duet, Duet SDI and Duet 8 ISO. Full control needs firmware **2.3 or newer** on Deck/Duet, or **2.1 or newer** on the Duet 8 ISO (the same requirement as the Companion GoStream module). Older firmware gets basic switching only (choose *Old firmware* when adding the switcher).
+
+**What you can do**
+* **Switcher:** Program and Preview buses, CUT, AUTO, FTB, Mix/Dip/Wipe with rate, preview transition, and every upstream key and DSK (NEXT and ON AIR).
+* **Audio:** a channel strip per input with a touch fader (−75 to +10 dB), OFF/ON/AFV and pan.
+* **Record & Stream:** record (and ISO record on the Duet 8 ISO), go live, and enable or disable each of the 3 stream destinations, with status.
+* **Macros:** run and stop the switcher's macros.
+* **Outputs:** route each HDMI/USB output, choose the multiview layout, and see model, firmware and video format.
+* **Several switchers at once:** every switcher gets a tab in the top bar. Tap ⛓ on two or more to link them; CUT, AUTO, FTB, record and go-live then fire on all linked switchers together.
+* **Rename or hide sources:** hold a source button. Labels are stored in the bridge, so every iPad shows them.
+* **Find switchers:** *＋ → Find switchers on the network* uses Bonjour (`_oseectrl._tcp`) and a scan of port 19010 on the local subnet.
+* Live feedback from the switcher's own panel, automatic reconnection, an optional password, a raw command console (*⚙ Settings*), and keyboard shortcuts for a keyboard on the iPad (Space = AUTO, Enter = CUT, 1–9 = preview, ⇧1–9 = program).
+
+**Using it inside Streaming GuRu:** the remote starts with the app on port **8090**. Choose *Tools → OSEE Switcher Remote (iPad)…* to see the address to open on the iPad, for example `http://192.168.1.20:8090/`.
+
+**Running it on its own** (any Mac, Windows or Linux computer, or a Raspberry Pi, with Node.js 18 or newer; no `npm install` needed):
+```sh
+node osee/server.js                      # serves http://<this-computer>:8090/
+node osee/server.js --port 9000 --password secret --config ~/osee-devices.json
+```
+
+Then, on the iPad:
+1. Open the address in Safari. Tap **Share → Add to Home Screen** to run it full screen like an app.
+2. Tap **＋**, then **Find switchers on the network**, or type the switcher's IP address (shown on the switcher under *Settings → Network*). The port is 19010.
+
+**No switcher to hand?** `node osee/sim.js --model duet8iso` (or `deck`, `duet`) starts a simulated switcher on port 19010. Add `127.0.0.1` in the remote to try everything.
 
 ## Bitfocus Companion and Stream Deck
 
@@ -217,6 +252,11 @@ main/browser-input.js   Offscreen Chromium pages for web browser inputs
 main/sysmon.js          CPU / GPU / RAM monitor for the status bar
 main/countdown-host.js  Hosts Unique AV Countdown (engine, windows, remote, OSC, mixer bridge)
 countdown/              Unique AV Countdown sources (engine, OSC, phone remote, operator + presenter UI)
+osee/gostream.js        OSEE GoStream TCP protocol client (framing, CRC, state sync, reconnect)
+osee/server.js          OSEE Switcher Remote bridge: HTTP + live updates for the iPad UI, device list
+osee/discovery.js       Finds GoStream switchers (Bonjour + subnet scan)
+osee/sim.js             Simulated GoStream switcher for testing
+osee/public/            OSEE Switcher Remote web interface (iPad)
 src/engine/video-outputs.js  Unlimited outputs (displays, windows, DeckLink, SRT/RTMP/UDP, audio devices)
 main/updater.js         Auto-update (manifest check, verified download, bundle swap)
 scripts/                Release manifest generator, ad-hoc signing hook
