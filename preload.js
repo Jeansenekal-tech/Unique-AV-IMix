@@ -80,6 +80,21 @@ contextBridge.exposeInMainWorld('imix', {
   countdownPresenter: () => ipcRenderer.invoke('cd:presenter:toggle'),
   onCountdownTick: on('cd:tick'),
 
+  ndiStatus: () => ipcRenderer.invoke('ndi:status'),
+  ndiSetLibPath: (p) => ipcRenderer.invoke('ndi:setLibPath', p),
+  ndiFind: (ms, extraIps) => ipcRenderer.invoke('ndi:find', ms, extraIps),
+  ndiRecvOpen: (id, opts) => ipcRenderer.invoke('ndi:recv-open', id, opts),
+  ndiRecvClose: (id) => ipcRenderer.invoke('ndi:recv-close', id),
+  ndiRecvAudio: (id, on) => ipcRenderer.send('ndi:recv-audio', id, on),
+  ndiTally: (id, program, preview) => ipcRenderer.send('ndi:tally', id, program, preview),
+  ndiSendOpen: (id, opts) => ipcRenderer.invoke('ndi:send-open', id, opts),
+  ndiSendClose: (id) => ipcRenderer.invoke('ndi:send-close', id),
+  ndiSendVideo: (id, frame) => ipcRenderer.send('ndi:send-video', id, frame),
+  ndiSendAudio: (id, frame) => ipcRenderer.send('ndi:send-audio', id, frame),
+  onNdiFrame: on('ndi-frame'),
+  onNdiAudio: on('ndi-audio'),
+  onNdiEvent: on('ndi-event'),
+
   onMenu: on('menu'),
   onLog: on('log'),
 });

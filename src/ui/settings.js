@@ -68,6 +68,24 @@ export function openSettings(app, initialTab) {
         },
       }, 'Apply format'),
       h('label', null, 'Multiview refresh'), thumbs,
+      h('h4', null, 'NDI®'),
+      h('label', null, 'NDI runtime'), (() => {
+        const status = h('div', { class: 'help' }, 'Checking…');
+        const input = h('input', {
+          type: 'text', value: s.ndiLibPath || '', placeholder: 'auto-detect (NDI SDK / NDI Tools)', style: { width: '100%' },
+          onchange: async (e) => {
+            s.ndiLibPath = e.target.value.trim();
+            save();
+            show(await window.imix?.ndiSetLibPath(s.ndiLibPath));
+          },
+        });
+        const show = (st) => {
+          status.textContent = !st ? 'NDI needs the desktop app' : st.available ? `✔ ${st.version} – ${st.path}` : `✖ ${st.error}`;
+        };
+        window.imix?.ndiStatus().then(show);
+        if (!window.imix) show(null);
+        return h('div', null, input, status);
+      })(),
       h('label', null, 'Show overlays on Preview'), check(s.previewOverlays, (v) => { s.previewOverlays = v; save(); }),
       h('label', null, 'Restore last session on launch'), check(s.autoRestoreSession, (v) => { s.autoRestoreSession = v; save(); }),
       h('div', { class: 'full help' }, 'Any size works, including LED-wall and projector resolutions. Higher resolutions and frame rates need more GPU power – Apple Silicon handles 1080p60 comfortably; 4K60 needs an M-series Pro/Max or better. Streaming services expect standard sizes (e.g. 1920×1080).'));

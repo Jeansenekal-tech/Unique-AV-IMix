@@ -59,6 +59,9 @@ async function mixerWindow() {
   throw new Error('mixer window did not open');
 }
 const page = await mixerWindow();
+app.process().on('exit', (c, s) => console.log('APP PROCESS EXIT', c, s));
+if (process.env.SMOKE_DEBUG) app.process().stderr.on('data', (d) => process.stdout.write('[main] ' + d));
+page.on('crash', () => console.log('RENDERER CRASHED'));
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 await page.waitForFunction(() => window.imixApp && window.imixApp.ready, null, { timeout: 30000 });
@@ -109,7 +112,7 @@ const tcp = await new Promise((resolve, reject) => {
     sock.write('PING\r\nSUBSCRIBE ACTS\r\nSUBSCRIBE TALLY\r\nFUNCTION PreviewInput Input=2\r\nFUNCTION Cut\r\nTALLY\r\nXML\r\n');
     const start = Date.now();
     const wait = setInterval(() => {
-      if (/<\/vmix>/.test(buf) || Date.now() - start > 15000) {
+      if ((/<\/vmix>/.test(buf) && /ACTS OK Input 2 1/.test(buf)) || Date.now() - start > 15000) {
         clearInterval(wait);
         sock.end();
         resolve(buf);
@@ -263,6 +266,57 @@ if (fs.existsSync(devOut)) {
   const probe = execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_name,width,height', '-of', 'compact=p=0', devOut]).toString();
   check(/codec_name=h264/.test(probe), `clean feed → FFmpeg network output (${probe.trim().replace(/\n/g, ' | ')})`);
 } else check(false, 'network output file written');
+
+// ------------------------------------------------- NDI® out → NDI® in
+// Uses the real NDI runtime when installed, or the mock built from
+// test/ndi-mock (NDI_RUNTIME_DIR_V6) on CI machines without it.
+const ndiStatus = await page.evaluate(() => window.imix.ndiStatus());
+if (!ndiStatus.available) {
+  console.log(`- NDI runtime not available here, skipping NDI checks (${ndiStatus.error})`);
+} else {
+  const clip = path.join(here, 'output', 'fixtures', 'clip.webm');
+  if (!fs.existsSync(clip)) {
+    fs.mkdirSync(path.dirname(clip), { recursive: true });
+    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=size=320x180:rate=15', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '4', '-c:v', 'libvpx', '-c:a', 'libopus', '-shortest', clip]);
+  }
+  const nd = await page.evaluate(async (clipPath) => {
+    const m = imixApp.mixer;
+    const vo = imixApp.videoOutputs;
+    const tone = await m.addInput({ type: 'video', path: clipPath, settings: { loop: true, audio: { afv: false } } }, { select: false });
+    tone.el.loop = true;
+    tone.play();
+    const out = vo.add({ name: 'GuRu NDI Test', target: 'ndi', source: 'program', audioBus: 'M' });
+    await vo.open(out.id);
+    await new Promise((r) => setTimeout(r, 800));
+    const found = await window.imix.ndiFind(1500);
+    const src = found.sources.find((s) => /GuRu NDI Test/.test(s.name));
+    if (!src) return { found: found.sources.map((s) => s.name), err: found.message };
+    // receive it back; keep its audio off the master bus (no feedback loop)
+    const inp = await m.addInput({ type: 'ndi', source: src.name, settings: { audio: { afv: false, buses: { M: false, F: true } } } }, { select: false });
+    await new Promise((r) => setTimeout(r, 2500));
+    m.cut(inp.id); // NDI input on air → tally to the source (our own sender)
+    await new Promise((r) => setTimeout(r, 2500));
+    const ch = m.audio.channels.get(inp.id);
+    const level = ch ? Math.max(...ch.meter.read()) : 0;
+    const rt = vo.runtime.get(out.id);
+    const res = {
+      source: src.name, frame: inp.frame ? [inp.frame.width, inp.frame.height] : null, err: inp.error, level,
+      connections: rt?.connections, tally: rt?.ndiTally, state: inp.state,
+      xml: /type="NDI"|type="ndi"/.test(imixApp.api.stateXml()),
+    };
+    const sel = await imixApp.api.call('NDISelectSourceByName', { Input: inp.id, Value: src.name });
+    res.select = sel.ok;
+    m.removeInput(inp.id);
+    m.removeInput(tone.id);
+    vo.remove(out.id);
+    return res;
+  }, clip);
+  check(!!nd.source, `NDI output discovered on the network (${nd.source || JSON.stringify(nd.found)} ${nd.err || ''})`);
+  check(nd.frame && nd.frame[0] === 320 && nd.frame[1] === 180, `NDI input receives video at the output resolution (${JSON.stringify(nd.frame)} ${nd.err || ''})`);
+  check(nd.level > 0.01, `NDI input receives audio (peak ${Number(nd.level).toFixed(3)})`);
+  check(nd.connections >= 1 && nd.tally && nd.tally.program === true, `NDI tally reaches the sender (${nd.connections} receiver, program=${nd.tally?.program})`);
+  check(nd.select, 'NDISelectSourceByName API');
+}
 
 // --------------------------------------------------------------- ffmpeg info
 const ff = await page.evaluate(() => window.imix.ffmpegInfo());

@@ -9,12 +9,14 @@
 //           device – interfaces, HDMI/SDI embedders, AirPlay speakers)
 // Display/window outputs can also carry a bus to a chosen audio device.
 import { newId } from './inputs.js';
+import { ensureNdiWorklet } from './ndi-audio.js';
 
 const imix = () => window.imix;
 
 export const OUTPUT_TARGETS = [
   ['display', 'Display (full screen)'],
   ['window', 'Window'],
+  ['ndi', 'NDI® source on the network'],
   ['decklink', 'Blackmagic DeckLink / UltraStudio (FFmpeg)'],
   ['stream', 'Network stream – SRT / RTMP / UDP (FFmpeg)'],
   ['audio', 'Audio device only'],
@@ -32,6 +34,8 @@ export function defaultOutput(n) {
     bitrate: 8000,
     audioBus: '',
     audioDevice: '',
+    ndiName: '',
+    ndiGroups: '',
     autoStart: false,
   };
 }
@@ -142,6 +146,8 @@ export class VideoOutputs {
         await this.openWindow(o, rt);
       } else if (o.target === 'decklink' || o.target === 'stream') {
         await this.openEncoder(o, rt);
+      } else if (o.target === 'ndi') {
+        await this.openNdi(o, rt);
       }
     } catch (e) {
       this.close(o.id);
@@ -214,6 +220,66 @@ export class VideoOutputs {
     this.app.outputs.addLog(`${o.name}: started (${o.target === 'decklink' ? `DeckLink ${o.device}` : o.url})`);
   }
 
+  // NDI® output: read back the source's pixels every frame and send them
+  // through a native NDI sender (worker thread in the main process).
+  async openNdi(o, rt) {
+    if (!imix()?.ndiSendOpen) throw new Error('NDI needs the desktop app');
+    if (o.source === 'multiview') throw new Error('Multiview can only go to a display or window');
+    const st = await imix().ndiStatus();
+    if (!st.available) throw new Error(`NDI runtime not found – install NDI Tools or the NDI SDK (${st.error || ''})`);
+    const name = (o.ndiName || o.name || 'Output').trim();
+    const r = await imix().ndiSendOpen(o.id, { name, groups: o.ndiGroups || '' });
+    if (r && r.ok === false) throw new Error(r.message);
+    rt.ndi = true;
+    let source;
+    if (o.source === 'program') {
+      source = this.app.outputs.canvas;
+    } else {
+      rt.extraKey = o.source;
+      if (o.source.startsWith('input:')) this.mixer.extraRenders.add(o.source.slice(6));
+      source = this.mixer.compositor.acquireExtra(o.source);
+    }
+    const scratch = document.createElement('canvas');
+    const sctx = scratch.getContext('2d', { willReadFrequently: true, alpha: false });
+    rt.offFrame = this.mixer.on('frame', () => {
+      const { width: w, height: h, fps } = this.mixer.settings;
+      if (scratch.width !== w || scratch.height !== h) {
+        scratch.width = w;
+        scratch.height = h;
+      }
+      sctx.drawImage(source, 0, 0, w, h);
+      const img = sctx.getImageData(0, 0, w, h);
+      imix().ndiSendVideo(o.id, { width: w, height: h, fps, format: 'RGBA', data: img.data.buffer });
+    });
+    if (o.audioBus) {
+      const ctx = this.mixer.audio.ctx;
+      await ensureNdiWorklet(ctx);
+      const tap = new AudioWorkletNode(ctx, 'imix-ndi-tap', { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 2, channelCountMode: 'explicit' });
+      const sink = ctx.createGain();
+      sink.gain.value = 0;
+      this.mixer.audio.buses[o.audioBus].mute.connect(tap);
+      tap.connect(sink).connect(ctx.destination); // keeps the tap in the render graph
+      tap.port.onmessage = (e) => imix().ndiSendAudio(o.id, { sampleRate: e.data.rate, channels: 2, samples: e.data.samples, data: e.data.data });
+      rt.tap = tap;
+      rt.tapBus = o.audioBus;
+    }
+    this.app.outputs.addLog(`${o.name}: NDI output “${name}” started`);
+  }
+
+  onNdiEvent(ev) {
+    const rt = this.runtime.get(ev.id);
+    const o = this.find(ev.id);
+    if (!rt) return;
+    if (ev.type === 'status') {
+      rt.connections = ev.connections;
+      rt.ndiTally = ev.tally;
+      this.mixer.emit('outputs');
+    } else if (ev.type === 'fatal' || ev.type === 'error') {
+      this.mixer.emit('toast', `${o?.name || 'NDI output'}: ${ev.message}`);
+      if (ev.type === 'fatal') this.close(ev.id);
+    }
+  }
+
   close(id) {
     const o = this.find(id);
     const key = o ? o.id : id;
@@ -226,6 +292,16 @@ export class VideoOutputs {
       rt.audioEl.pause();
       rt.audioEl.srcObject = null;
     }
+    if (rt.offFrame) rt.offFrame();
+    if (rt.tap) {
+      try {
+        this.mixer.audio.buses[rt.tapBus].mute.disconnect(rt.tap);
+        rt.tap.disconnect();
+      } catch {
+        /* ignore */
+      }
+    }
+    if (rt.ndi) imix()?.ndiSendClose(key);
     if (rt.rec) {
       try {
         rt.rec.stop();

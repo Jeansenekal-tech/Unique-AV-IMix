@@ -144,6 +144,10 @@ class Channel {
           if (!key._imixSource) key._imixSource = ctx.createMediaElementSource(key);
           node = key._imixSource;
         }
+      } else if (inp.createAudioNode) {
+        key = inp;
+        if (key !== this.sourceKey) node = inp.createAudioNode(ctx);
+        if (!node && key !== this.sourceKey) return;
       } else if (inp.audioStream) {
         key = inp.stream;
         if (key !== this.sourceKey) node = ctx.createMediaStreamSource(inp.audioStream);

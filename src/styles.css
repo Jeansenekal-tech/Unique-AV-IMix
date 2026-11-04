@@ -264,3 +264,10 @@ table.list th { color: var(--text3); font-weight: 600; }
 .live-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text3); flex: none; }
 .output-card.live .live-dot { background: var(--program); animation: pulse 1s infinite; }
 .warn-box { background: rgba(245,165,36,.1); border: 1px solid rgba(245,165,36,.35); border-radius: 6px; padding: 8px 10px; color: var(--text2); }
+
+/* NDI source picker */
+.ndi-list { max-height: 240px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); min-height: 60px; }
+.ndi-list > .help { padding: 12px; }
+.ndi-item { padding: 8px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.ndi-item:hover { background: var(--bg3); }
+.ndi-item.selected { background: rgba(124,92,255,.2); }

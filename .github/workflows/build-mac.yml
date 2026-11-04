@@ -42,8 +42,28 @@ jobs:
       - run: node test/unit-updater.mjs
       - run: node test/unit-sysmon.mjs
       - run: node test/countdown-engine-test.cjs
+      - name: Build the mock NDI runtime (the real one only runs on macOS below)
+        run: |
+          mkdir -p "$RUNNER_TEMP/ndi"
+          gcc -O2 -shared -fPIC -o "$RUNNER_TEMP/ndi/libndi.so" test/ndi-mock/mock_ndi.c -lpthread
+          NDI_RUNTIME_DIR_V6="$RUNNER_TEMP/ndi" node test/ndi-real-test.cjs
       - run: node test/browser-smoke.mjs
-      - run: xvfb-run -a node test/electron-smoke.mjs
+      - run: NDI_RUNTIME_DIR_V6="$RUNNER_TEMP/ndi" xvfb-run -a node test/electron-smoke.mjs
+
+  # Real NDI® runtime on a Mac: sender → discovery → receiver loopback.
+  ndi-macos:
+    # libndi.dylib is universal; the Intel runner pool is usually less busy
+    runs-on: macos-15-intel
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Download the NDI SDK for Apple
+        run: bash scripts/fetch-ndi-runtime.sh "$RUNNER_TEMP/ndi"
+      - run: node test/ndi-real-test.cjs "$RUNNER_TEMP/ndi/libndi.dylib"
 
   build:
     strategy:
@@ -67,6 +87,9 @@ jobs:
       - name: Use the release version as the app version
         if: env.RELEASE_VERSION != ''
         run: npm version --no-git-tag-version --allow-same-version "${RELEASE_VERSION#v}"
+      - name: Bundle the NDI runtime (repository variable BUNDLE_NDI_RUNTIME=true)
+        if: vars.BUNDLE_NDI_RUNTIME == 'true'
+        run: bash scripts/fetch-ndi-runtime.sh vendor/ndi
       - name: Build .dmg + .zip
         env:
           MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}

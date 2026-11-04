@@ -40,6 +40,22 @@ export function openInputSettings(app, input) {
         h('button', { class: 'btn small', onclick: () => input.navigate(url.value) }, 'Go'),
         h('button', { class: 'btn small', onclick: () => input.reload() }, 'Reload')));
     }
+    if (input.type === 'ndi') {
+      const srcSel = h('select', { style: { flex: 1 } }, h('option', { value: input.source }, input.source || '—'));
+      const refresh = async () => {
+        const r = await window.imix.ndiFind(1500);
+        srcSel.replaceChildren(...[...new Set([input.source, ...r.sources.map((x) => x.name)])].filter(Boolean).map((n) => h('option', { value: n, selected: n === input.source }, n)));
+      };
+      srcSel.addEventListener('change', () => input.changeSource(srcSel.value));
+      rows.push(
+        h('label', null, 'NDI source'), h('div', { class: 'row' }, srcSel, h('button', { class: 'btn small', onclick: refresh }, '⟳')),
+        h('label', null, 'Bandwidth'), select(['highest', 'lowest'], input.bandwidth, (v) => input.setBandwidth(v), { highest: 'Full quality', lowest: 'Low bandwidth (proxy)' }),
+        h('label', null, 'Receive audio'), check(input.audioOn, (v) => { input.audioOn = v; window.imix.ndiRecvAudio(input.id, v); }),
+        h('label', null, 'Status'), h('span', null, input.error || (input.frame ? `${input.frame.width}×${input.frame.height}${input.frame.fps ? ` @ ${input.frame.fps.toFixed(2)}` : ''}` : 'Connecting…')),
+        h('div', { class: 'full help' }, 'Tally from this mixer is sent back to the NDI source (red = on air, green = preview). NDI® is a registered trademark of Vizrt NDI AB.'),
+      );
+      setTimeout(refresh);
+    }
     if (input.type === 'camera') {
       rows.push(h('label', null, 'Device'), h('span', null, input.deviceLabel || input.deviceId || 'Default'));
     }
