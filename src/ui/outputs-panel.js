@@ -73,6 +73,18 @@ export async function openOutputsPanel(app) {
           'DeckLink/UltraStudio output needs Blackmagic Desktop Video installed and an FFmpeg built with DeckLink support (the bundled FFmpeg cannot include it for licensing reasons). Set its path in Settings → Streaming → FFmpeg path, then reopen this window. The output format follows the mixer format (Settings → General) and must be a mode the card supports, e.g. 1080p25 / 1080p29.97 / 1080p50.'));
       }
     }
+    if (o.target === 'ndi') {
+      const rtInfo = vo.runtime.get(o.id);
+      targetFields.push(
+        h('label', null, 'NDI name'), h('input', { type: 'text', value: o.ndiName, placeholder: o.name, onchange: (e) => { o.ndiName = e.target.value.trim(); restartIfOpen(); } }),
+        h('label', null, 'NDI groups'), h('input', { type: 'text', value: o.ndiGroups, placeholder: 'optional, e.g. Studio A', onchange: (e) => { o.ndiGroups = e.target.value.trim(); restartIfOpen(); } }),
+      );
+      if (rtInfo) {
+        const t = rtInfo.ndiTally || {};
+        targetFields.push(h('div', { class: 'full help' }, `${rtInfo.connections ?? 0} receiver(s) connected${t.program ? ' · ON AIR at a receiver' : t.preview ? ' · in preview at a receiver' : ''}. Appears on the network as “${(window.imixApp?.info?.hostname || 'this Mac').toUpperCase()} (${o.ndiName || o.name})”.`));
+      }
+      targetFields.push(h('div', { class: 'full help' }, 'NDI® is a registered trademark of Vizrt NDI AB.'));
+    }
     if (o.target === 'stream') {
       targetFields.push(
         h('label', null, 'URL'), h('input', { type: 'text', value: o.url, placeholder: 'srt://host:9000?mode=caller · rtmp://server/app/key · udp://239.0.0.1:5000', onchange: (e) => { o.url = e.target.value.trim(); restartIfOpen(); } }),
@@ -82,6 +94,7 @@ export async function openOutputsPanel(app) {
     const audioBus = sel([['', o.target === 'audio' ? 'Choose a bus…' : 'No audio'], ...BUSES.map((b) => [b, busLabel(b)])], o.audioBus, (v) => { o.audioBus = v; restartIfOpen(); });
     const audioDev = sel([['', 'System default output'], ...audioDevices.filter((d) => d.deviceId !== 'default').map((d) => [d.deviceId, d.label || 'Audio device'])], o.audioDevice, (v) => { o.audioDevice = v; restartIfOpen(); });
     const showAudioDevice = o.target === 'display' || o.target === 'window' || o.target === 'audio';
+    if (o.target === 'ndi' && o.audioBus === undefined) o.audioBus = 'M';
     return h('div', { class: `output-card ${open ? 'live' : ''}` },
       h('div', { class: 'output-head' },
         h('span', { class: 'live-dot' }),
@@ -104,7 +117,7 @@ export async function openOutputsPanel(app) {
         o.target === 'audio' ? null : sel(sourceOptions(), o.source, (v) => { o.source = v; restartIfOpen(); }),
         h('label', null, 'Destination'), sel(OUTPUT_TARGETS, o.target, (v) => { o.target = v; restartIfOpen(); }),
         ...targetFields,
-        h('label', null, o.target === 'decklink' || o.target === 'stream' ? 'Audio (embedded)' : 'Audio bus'), audioBus,
+        h('label', null, ['decklink', 'stream', 'ndi'].includes(o.target) ? 'Audio (embedded)' : 'Audio bus'), audioBus,
         showAudioDevice && o.audioBus ? h('label', null, 'Audio device') : null,
         showAudioDevice && o.audioBus ? audioDev : null));
   }
@@ -123,7 +136,7 @@ export async function openOutputsPanel(app) {
   let last = '';
   const off = mixer.on('outputs', () => {
     if (!document.body.contains(body) || body.contains(document.activeElement)) return;
-    const sig = JSON.stringify([vo.list, [...vo.runtime.keys()]]);
+    const sig = JSON.stringify([vo.list, [...vo.runtime.entries()].map(([k, r]) => [k, r.connections, r.ndiTally])]);
     if (sig !== last) {
       last = sig;
       draw();

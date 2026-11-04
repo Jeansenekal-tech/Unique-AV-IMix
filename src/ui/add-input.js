@@ -104,6 +104,8 @@ async function addOfType(app, type) {
       return urlDialog(app);
     case 'countdown':
       return countdownDialog(app);
+    case 'ndi':
+      return ndiDialog(app);
     case 'replay':
       await mixer.addInput({ type: 'replay' });
       toast('Instant Replay input added – replay buffer is recording');
@@ -275,6 +277,83 @@ function browserDialog(app) {
       },
     }],
   });
+}
+
+export const NDI_NOTICE = 'NDI® is a registered trademark of Vizrt NDI AB.';
+
+async function ndiDialog(app) {
+  if (!window.imix?.ndiStatus) return toast('NDI needs the desktop app', 'error');
+  const st = await window.imix.ndiStatus();
+  if (!st.available) {
+    modal({
+      title: 'NDI® runtime not found',
+      body: h('div', null,
+        h('p', null, 'NDI inputs and outputs use the free NDI runtime. Install one of these, then try again:'),
+        h('ul', null,
+          h('li', null, h('b', null, 'NDI SDK for Apple'), ' (installs the runtime at /Library/NDI SDK for Apple)'),
+          h('li', null, h('b', null, 'NDI Tools'), ' for Mac')),
+        h('p', null, h('button', { class: 'btn small primary', onclick: () => window.imix.openExternal('https://ndi.video/for-developers/ndi-sdk/download/') }, 'Open ndi.video downloads')),
+        h('p', { class: 'help' }, `Or point to libndi.dylib in Settings → General → NDI runtime. Details: ${st.error || ''}`),
+        h('p', { class: 'help' }, NDI_NOTICE)),
+      width: 560,
+      buttons: [{ label: 'Close', primary: true }],
+    });
+    return;
+  }
+  const list = h('div', { class: 'ndi-list' });
+  const manualName = h('input', { type: 'text', placeholder: 'MACHINE (Source name)', style: { width: '100%' } });
+  const manualUrl = h('input', { type: 'text', placeholder: 'optional IP:port, e.g. 192.168.1.50:5961', style: { width: '100%' } });
+  const extra = h('input', { type: 'text', placeholder: 'other subnets to search, e.g. 10.0.5.20,10.0.6.0', style: { width: '100%' } });
+  const bw = h('select', null, h('option', { value: 'highest' }, 'Full quality'), h('option', { value: 'lowest' }, 'Low bandwidth (preview proxy)'));
+  const audio = h('input', { type: 'checkbox', checked: true });
+  let selected = null;
+  const search = async () => {
+    list.replaceChildren(h('div', { class: 'help' }, 'Searching the network for NDI sources…'));
+    const r = await window.imix.ndiFind(2000, extra.value.trim());
+    if (!r.ok) return list.replaceChildren(h('div', { class: 'help' }, r.message));
+    if (!r.sources.length) return list.replaceChildren(h('div', { class: 'help' }, 'No NDI sources found yet. Check the sender is on the same network, or type its name below.'));
+    list.replaceChildren(...r.sources.map((src) => h('div', {
+      class: 'ndi-item',
+      onclick: (e) => {
+        selected = src;
+        list.querySelectorAll('.ndi-item').forEach((x) => x.classList.remove('selected'));
+        e.currentTarget.classList.add('selected');
+        manualName.value = src.name;
+        manualUrl.value = src.url || '';
+      },
+    }, h('b', null, src.name), src.url ? h('span', { class: 'help' }, `  ${src.url}`) : null)));
+  };
+  modal({
+    title: 'Add NDI® Source',
+    body: h('div', null,
+      h('div', { class: 'row', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' } },
+        h('span', { class: 'help' }, `NDI runtime ${st.version}`),
+        h('button', { class: 'btn small', onclick: search }, '⟳ Refresh')),
+      list,
+      h('div', { class: 'form', style: { marginTop: '10px' } },
+        h('label', null, 'Source name'), manualName,
+        h('label', null, 'Address'), manualUrl,
+        h('label', null, 'Bandwidth'), bw,
+        h('label', null, 'Audio'), h('div', { class: 'row' }, audio, h('span', { class: 'help' }, 'receive embedded audio')),
+        h('label', null, 'Extra IPs'), extra),
+      h('p', { class: 'help' }, NDI_NOTICE)),
+    width: 600,
+    buttons: [{ label: 'Cancel' }, {
+      label: 'Add',
+      primary: true,
+      onClick: async () => {
+        const name = manualName.value.trim() || selected?.name;
+        if (!name) {
+          toast('Choose an NDI source', 'error');
+          return false;
+        }
+        const input = await app.mixer.addInput({ type: 'ndi', source: name, url: manualUrl.value.trim(), bandwidth: bw.value, audioOn: audio.checked });
+        if (input.error) toast(input.error, 'error');
+        return true;
+      },
+    }],
+  });
+  search();
 }
 
 function countdownDialog(app) {

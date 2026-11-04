@@ -4,6 +4,7 @@
 //   serialize() / static restore
 import { TITLE_TEMPLATES, DEFAULT_TITLE_STYLE, renderTitle, parseDuration } from './titles.js';
 import { defaultEq, normalizeEq } from './eq.js';
+import { ensureNdiWorklet } from './ndi-audio.js';
 
 let idSeq = 0;
 export const newId = () => `${Date.now().toString(36)}${(idSeq++).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -22,6 +23,7 @@ export const INPUT_TYPES = {
   url: { label: 'Stream URL', icon: '📡' },
   replay: { label: 'Instant Replay', icon: '⏪' },
   countdown: { label: 'Countdown Timer', icon: '⏱' },
+  ndi: { label: 'NDI® Source', icon: '📶' },
 };
 
 export function defaultSettings() {
@@ -820,6 +822,113 @@ export class BrowserInput extends Input {
   }
 }
 
+// NDI® source: received in a worker thread in the main process, frames
+// arrive as BGRA pixels, audio through an AudioWorklet player.
+export class NdiInput extends Input {
+  constructor(opts = {}) {
+    super('ndi', opts);
+    this.source = opts.source || '';
+    this.url = opts.url || '';
+    this.bandwidth = opts.bandwidth || 'highest';
+    this.audioOn = opts.audioOn !== false;
+    this.hasAudio = this.audioOn;
+    this.frame = null;
+    this.lastFrameAt = 0;
+    this.audioNode = null;
+    if (!opts.title) this.title = this.source.replace(/^.*\((.*)\)$/, '$1') || 'NDI';
+  }
+
+  async init() {
+    if (!imix()?.ndiRecvOpen) {
+      this.error = 'NDI needs the desktop app';
+      return;
+    }
+    if (this.audioOn && this.audioContext) {
+      try {
+        await ensureNdiWorklet(this.audioContext);
+        this.audioNode = new AudioWorkletNode(this.audioContext, 'imix-ndi-player', { numberOfInputs: 0, outputChannelCount: [2] });
+      } catch (e) {
+        console.warn('NDI audio unavailable', e);
+        this.hasAudio = false;
+      }
+    }
+    await this.connect();
+  }
+
+  async connect() {
+    this.error = null;
+    if (!this.source) {
+      this.error = 'No NDI source selected';
+      return;
+    }
+    const r = await imix().ndiRecvOpen(this.id, { source: this.source, url: this.url, bandwidth: this.bandwidth, audio: this.audioOn });
+    if (r && r.ok === false) this.error = r.message;
+    this.changed();
+  }
+
+  async changeSource(source, url = '') {
+    this.source = source;
+    this.url = url;
+    this.frame = null;
+    if (!this.titleLocked) this.title = source.replace(/^.*\((.*)\)$/, '$1') || source;
+    await this.connect();
+  }
+
+  setBandwidth(b) {
+    this.bandwidth = b;
+    this.connect();
+  }
+
+  createAudioNode() {
+    return this.audioNode;
+  }
+
+  onFrame(f) {
+    this.frame = f;
+    this.lastFrameAt = performance.now();
+    if (this.error === 'No signal') {
+      this.error = null;
+      this.changed();
+    }
+    this.version++;
+  }
+
+  onAudio(a) {
+    this.audioNode?.port.postMessage({ samples: a.data, rate: a.sampleRate });
+  }
+
+  onEvent(ev) {
+    if (ev.type === 'fatal' || ev.type === 'error') this.error = ev.message;
+    if (ev.type === 'nosignal') this.error = 'No signal';
+    if (ev.type === 'ready') this.error = null;
+    this.changed();
+  }
+
+  get state() {
+    return this.frame && performance.now() - this.lastFrameAt < 2000 ? 'Running' : 'Paused';
+  }
+
+  videoSource() {
+    const f = this.frame;
+    if (!f) return null;
+    return { kind: 'pixels', data: f.data instanceof Uint8Array ? f.data : new Uint8Array(f.data), width: f.width, height: f.height, bgra: true, version: this.version };
+  }
+
+  serialize() {
+    return { ...super.serialize(), source: this.source, url: this.url, bandwidth: this.bandwidth, audioOn: this.audioOn };
+  }
+
+  destroy() {
+    super.destroy();
+    imix()?.ndiRecvClose(this.id);
+    try {
+      this.audioNode?.disconnect();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 // Unique AV Countdown's presenter timer as a mixer input (rendered offscreen).
 export class CountdownInput extends BrowserInput {
   constructor(opts = {}) {
@@ -886,6 +995,7 @@ export function createInput(data, ctx = {}) {
     case 'url': return new UrlInput(data);
     case 'replay': return new ReplayInput(data, ctx.replay);
     case 'countdown': return new CountdownInput(data);
+    case 'ndi': return new NdiInput(data);
     default: throw new Error(`Unknown input type ${data.type}`);
   }
 }

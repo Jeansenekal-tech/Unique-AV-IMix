@@ -301,6 +301,21 @@ function buildFunctions(app) {
     NextPlayListEntry: (p) => (optInput(m, p) || m.getInput(m.previewId))?.next?.(),
     PreviousPlayListEntry: (p) => (optInput(m, p) || m.getInput(m.previewId))?.previous?.(),
 
+    // ---------------------------------------------------------------- NDI®
+    NDISelectSourceByName: async (p) => {
+      const i = needInput(m, p);
+      if (i.type !== 'ndi') throw new Error('Input is not an NDI source');
+      await i.changeSource(String(p.Value || ''));
+    },
+    NDISelectSourceByIndex: async (p) => {
+      const i = needInput(m, p);
+      if (i.type !== 'ndi') throw new Error('Input is not an NDI source');
+      const r = await window.imix.ndiFind(1500);
+      const src = r.sources?.[num(p.Value, 1) - 1];
+      if (!src) throw new Error('No NDI source at that index');
+      await i.changeSource(src.name, src.url);
+    },
+
     // ------------------------------------------------- unlimited outputs
     OutputOn: (p) => vo().open(p.Value ?? p.Output ?? 1),
     OutputOff: (p) => vo().close(p.Value ?? p.Output ?? 1),

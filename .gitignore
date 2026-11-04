@@ -4,3 +4,5 @@ out/
 .DS_Store
 *.log
 test/output/
+vendor/ndi/*
+!vendor/ndi/.gitkeep

@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS = {
   replayQuality: '960x540',
   autoRestoreSession: true,
   updates: { auto: true, autoDownload: true, url: '' },
+  ndiLibPath: '',
 };
 
 const SETTINGS_KEY = 'imix.settings';
@@ -142,6 +143,7 @@ export class Mixer {
     }
     const input = createInput(data, { replay: this.replay });
     if (input.type === 'title') input.setSize(this.settings.width, this.settings.height);
+    input.audioContext = this.audio.ctx;
     this.inputs.push(input);
     this.emit('inputs');
     try {

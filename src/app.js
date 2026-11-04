@@ -289,6 +289,29 @@ function initBridge() {
     }
   });
   imix.onBrowserFrame((f) => mixer.getInput(f.id)?.onFrame(f));
+  // NDI® inputs
+  imix.onNdiFrame((f) => mixer.getInput(f.id)?.onFrame?.(f));
+  imix.onNdiAudio((a) => mixer.getInput(a.id)?.onAudio?.(a));
+  imix.onNdiEvent((ev) => {
+    if (ev.sender) app.videoOutputs.onNdiEvent(ev);
+    else mixer.getInput(ev.id)?.onEvent?.(ev);
+  });
+  // tally back to NDI sources (PTZ / camera tally lights)
+  const ndiTally = new Map();
+  const pushNdiTally = () => {
+    for (const inp of mixer.inputs) {
+      if (inp.type !== 'ndi') continue;
+      const program = mixer.isOnAir(inp);
+      const preview = !program && mixer.previewId === inp.id;
+      const key = `${program}|${preview}`;
+      if (ndiTally.get(inp.id) === key) continue;
+      ndiTally.set(inp.id, key);
+      imix.ndiTally(inp.id, program, preview);
+    }
+  };
+  mixer.on('tally', pushNdiTally);
+  mixer.on('state', pushNdiTally);
+  if (mixer.settings.ndiLibPath) imix.ndiSetLibPath(mixer.settings.ndiLibPath);
   imix.onLog((msg) => outputs.addLog(msg));
   imix.onMenu(({ cmd, arg }) => {
     const run = (p) => Promise.resolve(p).catch((e) => toast(e.message, 'error'));

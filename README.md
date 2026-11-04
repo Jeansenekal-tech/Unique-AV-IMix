@@ -23,6 +23,7 @@ It is an Electron app. Compositing runs on the GPU (WebGL/Metal), audio mixing u
 | **Web browser** | Any web page rendered offscreen, with transparency and custom CSS. Use it for HTML graphics and widgets. |
 | **Stream URL** | Direct media URLs. |
 | **Instant replay** | Shows the replay buffer as an input. |
+| **NDI® source** | Any NDI source on the network: cameras, PTZ, vMix, OBS, NDI Tools, phones. Video and audio at full or low bandwidth, with tally sent back (red on air, green in preview). |
 | **Countdown Timer** | The Unique AV Countdown presenter timer as an input, with an optional transparent background for overlays. |
 
 Add inputs from the **＋ Add Input** button or the **Input** menu, or drop files onto the inputs area. Drag tiles to reorder them.
@@ -64,6 +65,13 @@ Add inputs from the **＋ Add Input** button or the **Input** menu, or drop file
 * **Multiview output:** preview, program and every input with tally and labels.
 * **Snapshot:** saves a PNG of the output.
 * **Instant replay:** a rolling buffer of the output or any input. Play back the last N seconds in slow motion (0.1×–1×) and save Mark In/Out events.
+
+### NDI®
+* **NDI input** (*Add Input → NDI® Source*): lists the sources found on the network, connects by name or IP, and can search other subnets. Choose full or low bandwidth, with or without audio. Program and preview tally go back to the source, so NDI cameras light their tally lamps. Switch sources from the input settings or the API (`NDISelectSourceByName`, `NDISelectSourceByIndex`), which also works from Companion.
+* **NDI output** (*🖥 Outputs → Destination: NDI® source on the network*): as many NDI outputs as you need, each with its own source (program, clean feed, preview or any input) and its own audio bus. Each output can set its NDI name and groups, and shows how many receivers are connected and their tally.
+* **Under the hood:** every NDI receiver and sender runs on its own thread, through the official NDI runtime (libndi). The runtime is loaded with the `koffi` FFI library, so there's no native module to compile. Frame rates such as 29.97 are sent exactly as 30000/1001.
+* **Runtime:** install the free **NDI SDK for Apple** or **NDI Tools** from [ndi.video](https://ndi.video). The app finds the runtime automatically, or you can set its path in *Settings → General → NDI runtime*. To ship the runtime inside the app, set the repository variable `BUNDLE_NDI_RUNTIME` to `true` (*Settings → Secrets and variables → Actions → Variables*). The build then downloads the NDI SDK and copies `libndi.dylib` into the app, which means you, as the distributor, accept the [NDI SDK licence](https://ndi.video/for-developers/ndi-sdk/).
+* *NDI® is a registered trademark of Vizrt NDI AB.*
 
 ### Slow motion
 * Every video, playlist and audio-file input has a **playback speed** from 0.1× to 2×. You can choose to keep the audio pitch.
@@ -152,6 +160,7 @@ The app looks for updates through `updateUrl` in `package.json`, which by defaul
 node test/unit-updater.mjs                  # updater version logic + release manifest
 node test/unit-sysmon.mjs                   # GPU utilisation parsing
 node test/countdown-engine-test.cjs         # Unique AV Countdown engine + OSC (upstream tests)
+node test/ndi-real-test.cjs /path/libndi    # NDI send → discover → receive loopback (real runtime or test/ndi-mock)
 node test/browser-smoke.mjs                 # UI + engine in headless Chromium (needs playwright + ffmpeg)
 xvfb-run -a node test/electron-smoke.mjs    # full app: HTTP/TCP API, recording, FFmpeg streaming, browser input
 ```
@@ -188,7 +197,7 @@ Tested against the module's own XML parser and TCP protocol:
 * Title text fields and `SetText`.
 * Real-time activators (`SUBSCRIBE ACTS`), `PING`, and `Input=0` meaning the preview input.
 
-Companion actions for features this app doesn't have do nothing and return an error: PTZ, MultiCorder, video calls, multi-camera replay, data sources, NDI/OMT and Mix 2–16. The full list of supported functions is under *Help → API Reference*.
+Companion actions for features this app doesn't have do nothing and return an error: PTZ, MultiCorder, video calls, multi-camera replay, data sources, OMT and Mix 2–16. `NDISelectSourceByName` and `NDISelectSourceByIndex` are supported. The full list of supported functions is under *Help → API Reference*.
 
 **Stream Deck without Companion:** Stream Deck plugins built for vMix that send HTTP commands (`/api/?Function=…`) to port 8088 also work. Point them at this Mac's address.
 
@@ -215,6 +224,8 @@ main/ffmpeg.js          FFmpeg discovery, live streaming (tee muxer → RTMP/SRT
 main/api-server.js      HTTP + TCP control API and web controller
 main/browser-input.js   Offscreen Chromium pages for web browser inputs
 main/sysmon.js          CPU / GPU / RAM monitor for the status bar
+main/ndi/               NDI® bindings (koffi → libndi), worker threads, manager
+src/engine/ndi-audio.js Audio worklets for NDI audio in/out
 main/countdown-host.js  Hosts Unique AV Countdown (engine, windows, remote, OSC, mixer bridge)
 countdown/              Unique AV Countdown sources (engine, OSC, phone remote, operator + presenter UI)
 src/engine/video-outputs.js  Unlimited outputs (displays, windows, DeckLink, SRT/RTMP/UDP, audio devices)
@@ -239,8 +250,6 @@ src/web/index.html      Remote web controller
 
 vMix has had more than 15 years of development, and some of its features depend on proprietary SDKs or Windows-only drivers. These are **not** in this version:
 
-* **Native NDI** inputs and outputs (needs the NDI SDK and a native module).
-  *Workaround today:* install the free **NDI Tools for Mac** and use **NDI Virtual Input**. It turns any NDI source on your network into a camera, which you add here with *Add Input → Camera*. For NDI output, a screen-capture NDI sender can capture the External Output window (check which senders your NDI Tools version includes).
 * **SRT / RTMP inputs** (receiving streams). SRT and RTMP *outputs* are supported.
 * **Virtual camera output** into Zoom or Teams (needs a signed macOS camera extension).
 * **Video calls** (vMix Call), **PTZ camera control**, **3D virtual sets**, **multi-camera ISO recording** (MultiCorder), a visual **title designer** (GT Designer), **VST audio plugins** and **data sources** for titles.

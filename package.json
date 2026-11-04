@@ -38,7 +38,9 @@
       "countdown/**/*"
     ],
     "asarUnpack": [
-      "node_modules/ffmpeg-static/**"
+      "main/ndi/**",
+      "node_modules/ffmpeg-static/**",
+      "node_modules/koffi/**"
     ],
     "mac": {
       "category": "public.app-category.video",
@@ -62,11 +64,24 @@
       "title": "Unique AV Streaming GuRu",
       "artifactName": "Unique-AV-Streaming-GuRu-${version}-${arch}.${ext}"
     },
-    "afterSign": "scripts/adhoc-sign.cjs"
+    "afterSign": "scripts/adhoc-sign.cjs",
+    "extraResources": [
+      {
+        "from": "vendor/ndi",
+        "to": "ndi",
+        "filter": [
+          "**/*",
+          "!.gitkeep"
+        ]
+      }
+    ]
   },
   "updateUrl": "https://github.com/Jeansenekal-tech/Unique-AV-IMix/releases/latest/download",
   "repository": {
     "type": "git",
     "url": "https://github.com/Jeansenekal-tech/Unique-AV-IMix.git"
+  },
+  "dependencies": {
+    "koffi": "^2.16.3"
   }
 }

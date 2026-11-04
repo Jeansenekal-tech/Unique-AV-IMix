@@ -13,6 +13,7 @@ const { BrowserInputs } = require('./main/browser-input');
 const { Updater } = require('./main/updater');
 const { SystemMonitor } = require('./main/sysmon');
 const { CountdownHost } = require('./main/countdown-host');
+const { NdiManager } = require('./main/ndi');
 const pkg = require('./package.json');
 
 const APP_NAME = 'Unique AV Streaming GuRu';
@@ -38,6 +39,7 @@ let quitting = false;
 
 const streamer = new ffmpeg.Streamer((ev) => send('stream-event', ev));
 const deviceOutputs = new ffmpeg.DeviceOutputs((ev) => send('output-event', ev));
+const ndiManager = new NdiManager((channel, data) => send(channel, data));
 const browserInputs = new BrowserInputs(() => mainWindow && mainWindow.webContents);
 const updater = new Updater({
   defaultUrl: process.env.UASG_UPDATE_URL || pkg.updateUrl || '',
@@ -279,6 +281,7 @@ function registerIpc() {
     platform: process.platform,
     arch: process.arch,
     moviesDir: path.join(app.getPath('videos'), APP_NAME),
+    hostname: os.hostname().replace(/\.local$/, ''),
     documentsDir: app.getPath('documents'),
   }));
 
@@ -354,6 +357,32 @@ function registerIpc() {
   });
   ipcMain.on('output:chunk', (_e, id, data) => deviceOutputs.write(id, data));
   ipcMain.handle('output:stop', (_e, id) => deviceOutputs.stop(id));
+
+  // NDI® inputs / outputs
+  ipcMain.handle('ndi:status', () => ndiManager.status());
+  ipcMain.handle('ndi:setLibPath', (_e, p) => ndiManager.setLibPath(p));
+  ipcMain.handle('ndi:find', async (_e, timeoutMs, extraIps) => {
+    try {
+      return { ok: true, sources: await ndiManager.find(timeoutMs, extraIps) };
+    } catch (e) {
+      return { ok: false, message: e.message, sources: [] };
+    }
+  });
+  const tryNdi = (fn) => {
+    try {
+      return fn();
+    } catch (e) {
+      return { ok: false, message: e.message };
+    }
+  };
+  ipcMain.handle('ndi:recv-open', (_e, id, opts) => tryNdi(() => ndiManager.openReceiver(id, opts)));
+  ipcMain.handle('ndi:recv-close', (_e, id) => ndiManager.closeReceiver(id));
+  ipcMain.on('ndi:recv-audio', (_e, id, on) => ndiManager.setReceiverAudio(id, on));
+  ipcMain.on('ndi:tally', (_e, id, program, preview) => ndiManager.tally(id, program, preview));
+  ipcMain.handle('ndi:send-open', (_e, id, opts) => tryNdi(() => ndiManager.openSender(id, opts)));
+  ipcMain.handle('ndi:send-close', (_e, id) => ndiManager.closeSender(id));
+  ipcMain.on('ndi:send-video', (_e, id, frame) => ndiManager.senderVideo(id, frame));
+  ipcMain.on('ndi:send-audio', (_e, id, frame) => ndiManager.senderAudio(id, frame));
 
   ipcMain.handle('ffmpeg:info', () => ffmpeg.ffmpegInfo());
   ipcMain.handle('ffmpeg:setPath', (_e, p) => {
@@ -458,7 +487,7 @@ app.whenReady().then(async () => {
     applicationName: APP_NAME,
     applicationVersion: app.getVersion(),
     copyright: 'Unique AV',
-    credits: 'Live production: inputs, transitions, overlays, titles, audio, record, stream, replay.',
+    credits: 'Live production: inputs, transitions, overlays, titles, audio, record, stream, replay.\nNDI® is a registered trademark of Vizrt NDI AB – ndi.video',
   });
 
   registerIpc();
@@ -483,6 +512,7 @@ app.on('before-quit', () => {
   if (updater.state.status === 'ready' && !updater.installing) updater.install({ relaunch: false, force: true });
   streamer.stop();
   deviceOutputs.stopAll();
+  ndiManager.closeAll();
   browserInputs.closeAll();
   apiServer.stop();
 });
