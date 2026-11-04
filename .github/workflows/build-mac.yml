@@ -52,7 +52,8 @@ jobs:
 
   # Real NDI® runtime on a Mac: sender → discovery → receiver loopback.
   ndi-macos:
-    runs-on: macos-15
+    # libndi.dylib is universal; the Intel runner pool is usually less busy
+    runs-on: macos-15-intel
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
