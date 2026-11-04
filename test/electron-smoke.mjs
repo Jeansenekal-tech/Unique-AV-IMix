@@ -112,7 +112,7 @@ const tcp = await new Promise((resolve, reject) => {
     sock.write('PING\r\nSUBSCRIBE ACTS\r\nSUBSCRIBE TALLY\r\nFUNCTION PreviewInput Input=2\r\nFUNCTION Cut\r\nTALLY\r\nXML\r\n');
     const start = Date.now();
     const wait = setInterval(() => {
-      if (/<\/vmix>/.test(buf) || Date.now() - start > 15000) {
+      if ((/<\/vmix>/.test(buf) && /ACTS OK Input 2 1/.test(buf)) || Date.now() - start > 15000) {
         clearInterval(wait);
         sock.end();
         resolve(buf);
